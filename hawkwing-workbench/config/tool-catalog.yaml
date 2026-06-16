@@ -1,0 +1,424 @@
+# Tool catalog inspired by broad security tool collections such as Z4nzu/hackingtool.
+# This catalog is intentionally allowlisted and risk-tagged for authorized ranges.
+#
+# status:
+#   enabled        available by default in stock runners
+#   approval       available only after manual approval
+#   disabled       cataloged for awareness, not executable by default
+
+tools:
+  nmap:
+    category: recon
+    version: "7.95"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-recon-basic
+    description: "Port and service discovery"
+  naabu:
+    category: recon
+    version: "v2.6.1"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-recon-basic
+    description: "Fast port discovery"
+  httpx:
+    category: recon
+    version: "v1.9.0"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-recon-basic
+    description: "HTTP probing and web fingerprinting"
+  subfinder:
+    category: recon
+    version: "v2.14.0"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-recon-basic
+    description: "Passive subdomain discovery"
+  dnsx:
+    category: recon
+    version: "latest-pinned-by-runner"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-recon-basic
+    description: "DNS probing"
+  whatweb:
+    category: recon
+    version: "0.5.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-recon-basic
+    description: "Web technology fingerprinting"
+
+  nuclei:
+    category: web
+    version: "v3.9.0"
+    status: enabled
+    risk_level: medium
+    runner_profile: runner-web-basic
+    description: "Template-based vulnerability scanning"
+  ffuf:
+    category: web
+    version: "v2.1.0"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-web-basic
+    description: "Web content and parameter fuzzing"
+  katana:
+    category: web
+    version: "v1.6.1"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-web-basic
+    description: "Web crawling"
+  dirsearch:
+    category: web
+    version: "0.4.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-web-basic
+    description: "Directory discovery"
+  feroxbuster:
+    category: web
+    version: "2.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-web-basic
+    description: "Fast content discovery"
+  testssl:
+    category: web
+    version: "3.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-web-basic
+    description: "TLS configuration assessment"
+  zap-baseline:
+    category: web
+    version: "stable"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-web-advanced
+    description: "OWASP ZAP baseline scan"
+  sqlmap:
+    category: web
+    version: "1.x"
+    status: approval
+    risk_level: high
+    runner_profile: runner-web-advanced
+    description: "SQL injection validation for authorized targets"
+  dalfox:
+    category: web
+    version: "2.x"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-web-advanced
+    description: "XSS validation"
+  arjun:
+    category: web
+    version: "2.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-web-advanced
+    description: "HTTP parameter discovery"
+
+  tshark:
+    category: traffic
+    version: "4.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-traffic-basic
+    description: "Packet capture analysis"
+  zeek:
+    category: traffic
+    version: "6.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-traffic-basic
+    description: "Network security monitoring and pcap analysis"
+  suricata:
+    category: traffic
+    version: "7.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-traffic-basic
+    description: "IDS rules and pcap analysis"
+  tcpdump:
+    category: traffic
+    version: "4.x"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-traffic-basic
+    description: "Packet capture in authorized ranges"
+
+  bloodhound-python:
+    category: active-directory
+    version: "1.x"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-ad-basic
+    description: "Active Directory relationship collection"
+  ldapsearch:
+    category: active-directory
+    version: "system"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-ad-basic
+    description: "LDAP enumeration"
+  smbclient:
+    category: active-directory
+    version: "system"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-ad-basic
+    description: "SMB share inspection"
+  enum4linux-ng:
+    category: active-directory
+    version: "1.x"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-ad-basic
+    description: "SMB and AD enumeration"
+  netexec:
+    category: active-directory
+    version: "1.x"
+    status: approval
+    risk_level: high
+    runner_profile: runner-ad-basic
+    description: "Authorized network service enumeration and validation"
+  impacket:
+    category: active-directory
+    version: "0.13.x"
+    status: approval
+    risk_level: high
+    runner_profile: runner-ad-basic
+    description: "Protocol tooling for authorized AD labs"
+  certipy:
+    category: active-directory
+    version: "5.x"
+    status: approval
+    risk_level: high
+    runner_profile: runner-ad-basic
+    description: "AD CS assessment in authorized labs"
+
+  chisel:
+    category: pivot-session
+    version: "latest-pinned-by-runner"
+    status: approval
+    risk_level: high
+    runner_profile: runner-pivot-proxy
+    description: "Approved tunnel session support; platform records session metadata rather than auto-establishing covert channels"
+  ligolo-ng:
+    category: pivot-session
+    version: "latest-pinned-by-runner"
+    status: approval
+    risk_level: high
+    runner_profile: runner-pivot-proxy
+    description: "Approved pivot session support for authorized ranges"
+  proxychains:
+    category: pivot-session
+    version: "system"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-pivot-proxy
+    description: "Proxy-aware tool execution after approved session registration"
+  webshell-detector:
+    category: web-defense
+    version: "ruleset"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-web-basic
+    description: "Detect suspicious webshell artifacts in uploaded evidence or authorized web roots"
+  controlled-proof-marker:
+    category: proof
+    version: "platform"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-web-advanced
+    description: "Non-malicious proof-of-access marker for authorized CTF/lab validation"
+
+  linpeas:
+    category: privesc
+    version: "latest-pinned-by-runner"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-linux-privesc
+    description: "Linux privilege escalation enumeration"
+  linux-smart-enumeration:
+    category: privesc
+    version: "latest-pinned-by-runner"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-linux-privesc
+    description: "Linux host enumeration"
+  pspy:
+    category: privesc
+    version: "latest-pinned-by-runner"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-linux-privesc
+    description: "Linux process monitoring in labs"
+  winpeas:
+    category: privesc
+    version: "latest-pinned-by-runner"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-windows-privesc
+    description: "Windows privilege escalation enumeration"
+  seatbelt:
+    category: privesc
+    version: "latest-pinned-by-runner"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-windows-privesc
+    description: "Windows host situational awareness"
+
+  volatility3:
+    category: forensics
+    version: "2.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-forensics-basic
+    description: "Memory forensics"
+  sleuthkit:
+    category: forensics
+    version: "4.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-forensics-basic
+    description: "Disk image forensics"
+  binwalk:
+    category: forensics
+    version: "2.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-forensics-basic
+    description: "Firmware and binary extraction"
+  exiftool:
+    category: forensics
+    version: "12.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-forensics-basic
+    description: "Metadata extraction"
+  bulk-extractor:
+    category: forensics
+    version: "2.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-forensics-basic
+    description: "Forensic feature extraction"
+  foremost:
+    category: forensics
+    version: "1.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-forensics-basic
+    description: "File carving"
+
+  pwntools:
+    category: pwn-reverse
+    version: "4.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-pwn-rev-basic
+    description: "CTF pwn scripting"
+  gdb:
+    category: pwn-reverse
+    version: "system"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-pwn-rev-basic
+    description: "Debugging"
+  radare2:
+    category: pwn-reverse
+    version: "5.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-pwn-rev-basic
+    description: "Reverse engineering"
+  checksec:
+    category: pwn-reverse
+    version: "system"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-pwn-rev-basic
+    description: "Binary hardening checks"
+  ropgadget:
+    category: pwn-reverse
+    version: "7.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-pwn-rev-basic
+    description: "ROP gadget discovery"
+
+  trivy:
+    category: cloud-container
+    version: "0.6x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-cloud-container-basic
+    description: "Container and filesystem vulnerability scanning"
+  grype:
+    category: cloud-container
+    version: "0.9x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-cloud-container-basic
+    description: "SBOM vulnerability scanning"
+  syft:
+    category: cloud-container
+    version: "1.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-cloud-container-basic
+    description: "SBOM generation"
+  kube-bench:
+    category: cloud-container
+    version: "0.10.x"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-cloud-container-basic
+    description: "Kubernetes CIS checks"
+  prowler:
+    category: cloud-container
+    version: "5.x"
+    status: approval
+    risk_level: medium
+    runner_profile: runner-cloud-container-basic
+    description: "Cloud security posture assessment"
+
+  ddos-tools:
+    category: prohibited
+    version: "n/a"
+    status: disabled
+    risk_level: prohibited
+    runner_profile: none
+    description: "Not supported by default"
+  behinder-webshell-generation:
+    category: prohibited
+    version: "n/a"
+    status: disabled
+    risk_level: prohibited
+    runner_profile: none
+    description: "Webshell generation is not supported; use detection, proof markers, and approved session registration instead"
+  godzilla-webshell-generation:
+    category: prohibited
+    version: "n/a"
+    status: disabled
+    risk_level: prohibited
+    runner_profile: none
+    description: "Webshell generation is not supported; use detection, proof markers, and approved session registration instead"
+  phishing-kits:
+    category: prohibited
+    version: "n/a"
+    status: disabled
+    risk_level: prohibited
+    runner_profile: none
+    description: "Not supported by default"
+  rat-frameworks:
+    category: prohibited
+    version: "n/a"
+    status: disabled
+    risk_level: prohibited
+    runner_profile: none
+    description: "Not supported by default"

@@ -1,0 +1,32 @@
+workspace:
+  name: "external-range-demo"
+  description: "外部临时靶场演练"
+
+targets:
+  - type: "cidr"
+    value: "10.10.10.0/24"
+  - type: "url"
+    value: "http://target.example"
+
+exclude_targets: []
+
+scan_policy:
+  mode: "standard"
+  rate_limit: "medium"
+  max_parallel_scan_jobs: 6
+  max_parallel_pentest_jobs: 4
+  per_target_max_jobs: 2
+  high_risk_max_jobs: 1
+  timeout_per_job_seconds: 1800
+
+approvals:
+  require_deep_scan_approval: true
+  require_pentest_approval: true
+  require_privilege_escalation_approval: true
+
+evidence:
+  keep_raw_logs: true
+  keep_http_responses: true
+  keep_screenshots: true
+  retention_days: 30
+

@@ -1,0 +1,190 @@
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: hawkwing
+      POSTGRES_USER: hawkwing
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hawkwing -d hawkwing"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8.8.0-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  runner-recon-basic:
+    image: hawkwing-runner-recon-basic:latest
+    build:
+      context: ../runners
+      dockerfile: runner-recon-basic/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-web-basic:
+    image: hawkwing-runner-web-basic:latest
+    build:
+      context: ../runners
+      dockerfile: runner-web-basic/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-web-advanced:
+    image: hawkwing-runner-web-advanced:latest
+    build:
+      context: ../runners
+      dockerfile: runner-web-advanced/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-traffic-basic:
+    image: hawkwing-runner-traffic-basic:latest
+    build:
+      context: ../runners
+      dockerfile: runner-traffic-basic/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-ad-basic:
+    image: hawkwing-runner-ad-basic:latest
+    build:
+      context: ../runners
+      dockerfile: runner-ad-basic/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-linux-privesc:
+    image: hawkwing-runner-linux-privesc:latest
+    build:
+      context: ../runners
+      dockerfile: runner-linux-privesc/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-windows-privesc:
+    image: hawkwing-runner-windows-privesc:latest
+    build:
+      context: ../runners
+      dockerfile: runner-windows-privesc/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-forensics-basic:
+    image: hawkwing-runner-forensics-basic:latest
+    build:
+      context: ../runners
+      dockerfile: runner-forensics-basic/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-pwn-rev-basic:
+    image: hawkwing-runner-pwn-rev-basic:latest
+    build:
+      context: ../runners
+      dockerfile: runner-pwn-rev-basic/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-cloud-container-basic:
+    image: hawkwing-runner-cloud-container-basic:latest
+    build:
+      context: ../runners
+      dockerfile: runner-cloud-container-basic/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-pivot-proxy:
+    image: hawkwing-runner-pivot-proxy:latest
+    build:
+      context: ../runners
+      dockerfile: runner-pivot-proxy/Dockerfile
+    profiles: ["build-runners"]
+
+  runner-report:
+    image: hawkwing-runner-report:latest
+    build:
+      context: ../runners/runner-report
+    profiles: ["build-runners"]
+
+  api:
+    build:
+      context: ../apps/api
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      ARTIFACT_ROOT: ${ARTIFACT_ROOT}
+      REPORT_ROOT: ${REPORT_ROOT}
+      WORKSPACE_ROOT: ${WORKSPACE_ROOT}
+      AI_PROVIDER: ${AI_PROVIDER}
+      AI_API_BASE: ${AI_API_BASE}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_MODEL: ${AI_MODEL}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS}
+      RUNNER_RECON_IMAGE: ${RUNNER_RECON_IMAGE}
+      RUNNER_WEB_IMAGE: ${RUNNER_WEB_IMAGE}
+      RUNNER_REPORT_IMAGE: ${RUNNER_REPORT_IMAGE}
+    volumes:
+      - ../data:/data
+      - ../config:/app/config:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-scan:
+    build:
+      context: ../apps/api
+    command: celery -A app.workers.celery_app worker -Q scan -c 4 --loglevel=INFO
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      ARTIFACT_ROOT: ${ARTIFACT_ROOT}
+      REPORT_ROOT: ${REPORT_ROOT}
+      RUNNER_RECON_IMAGE: ${RUNNER_RECON_IMAGE}
+      RUNNER_WEB_IMAGE: ${RUNNER_WEB_IMAGE}
+    volumes:
+      - ../data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - api
+
+  worker-pentest:
+    build:
+      context: ../apps/api
+    command: celery -A app.workers.celery_app worker -Q pentest -c 4 --loglevel=INFO
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      ARTIFACT_ROOT: ${ARTIFACT_ROOT}
+      REPORT_ROOT: ${REPORT_ROOT}
+      RUNNER_WEB_IMAGE: ${RUNNER_WEB_IMAGE}
+    volumes:
+      - ../data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - api
+
+  web:
+    build:
+      context: ../apps/web
+    environment:
+      VITE_API_BASE: ""
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:

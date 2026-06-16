@@ -1,0 +1,103 @@
+runner_profiles:
+  runner-recon-basic:
+    image: hawkwing-runner-recon-basic:latest
+    purpose: "Asset, port, DNS, and web fingerprint discovery"
+    risk_level: low
+    default_parallelism: 6
+    tools: [nmap, naabu, httpx, subfinder, dnsx, whatweb, curl, jq, python3]
+    output_schema: [assets, services, findings, evidence]
+
+  runner-web-basic:
+    image: hawkwing-runner-web-basic:latest
+    purpose: "Web crawling, content discovery, and template validation"
+    risk_level: medium
+    default_parallelism: 4
+    tools: [nuclei, ffuf, katana, dirsearch, feroxbuster, testssl, curl, jq, python3]
+    output_schema: [findings, http_evidence, screenshots, timeline]
+
+  runner-web-advanced:
+    image: hawkwing-runner-web-advanced:latest
+    purpose: "Approved deeper web validation"
+    risk_level: high
+    default_parallelism: 2
+    require_approval: true
+    tools: [zap-baseline, sqlmap, arjun, dalfox, nikto, curl, jq, python3]
+    output_schema: [findings, http_evidence, proof, timeline]
+
+  runner-traffic-basic:
+    image: hawkwing-runner-traffic-basic:latest
+    purpose: "Pcap and traffic evidence analysis"
+    risk_level: low
+    default_parallelism: 4
+    tools: [tshark, zeek, suricata, tcpdump, capinfos, jq, python3]
+    output_schema: [conversations, alerts, extracted_indicators, timeline]
+
+  runner-ad-basic:
+    image: hawkwing-runner-ad-basic:latest
+    purpose: "Approved AD enumeration and attack path collection"
+    risk_level: high
+    default_parallelism: 1
+    require_approval: true
+    tools: [bloodhound-python, ldapsearch, smbclient, enum4linux-ng, netexec, impacket, certipy]
+    output_schema: [domain, users, groups, computers, attack_paths, evidence]
+
+  runner-linux-privesc:
+    image: hawkwing-runner-linux-privesc:latest
+    purpose: "Linux privilege escalation enumeration from provided access context"
+    risk_level: medium
+    default_parallelism: 2
+    require_approval: true
+    tools: [linpeas, linux-smart-enumeration, pspy, curl, jq, python3]
+    output_schema: [privilege_findings, misconfigurations, evidence]
+
+  runner-windows-privesc:
+    image: hawkwing-runner-windows-privesc:latest
+    purpose: "Windows privilege escalation enumeration from provided access context"
+    risk_level: medium
+    default_parallelism: 2
+    require_approval: true
+    tools: [winpeas, seatbelt, accesschk, jq, python3]
+    output_schema: [privilege_findings, misconfigurations, evidence]
+
+  runner-forensics-basic:
+    image: hawkwing-runner-forensics-basic:latest
+    purpose: "Memory, disk, firmware, and file forensics"
+    risk_level: low
+    default_parallelism: 4
+    tools: [volatility3, sleuthkit, binwalk, exiftool, bulk-extractor, foremost, file, strings, jq, python3]
+    output_schema: [artifacts, indicators, extracted_files, timeline]
+
+  runner-pwn-rev-basic:
+    image: hawkwing-runner-pwn-rev-basic:latest
+    purpose: "Pwn and reverse engineering challenge support"
+    risk_level: low
+    default_parallelism: 3
+    tools: [pwntools, gdb, radare2, checksec, ropgadget, file, strings, jq, python3]
+    output_schema: [binary_metadata, protections, notes, evidence]
+
+  runner-cloud-container-basic:
+    image: hawkwing-runner-cloud-container-basic:latest
+    purpose: "Container, SBOM, Kubernetes, and cloud posture assessment"
+    risk_level: medium
+    default_parallelism: 2
+    require_approval: true
+    tools: [trivy, grype, syft, kube-bench, prowler, jq, python3]
+    output_schema: [misconfigurations, vulnerabilities, sbom, evidence]
+
+  runner-pivot-proxy:
+    image: hawkwing-runner-pivot-proxy:latest
+    purpose: "Approved pivot/proxy session registration and proxy-aware validation support"
+    risk_level: high
+    default_parallelism: 1
+    require_approval: true
+    tools: [chisel, ligolo-ng, proxychains, socat, curl, jq, python3]
+    output_schema: [session_reference, route_notes, evidence, timeline]
+
+  runner-dynamic:
+    image: dynamic
+    purpose: "Dynamically built or pulled image after policy and human approval"
+    risk_level: variable
+    default_parallelism: 1
+    require_approval: true
+    tools: []
+    output_schema: [result, evidence, timeline]

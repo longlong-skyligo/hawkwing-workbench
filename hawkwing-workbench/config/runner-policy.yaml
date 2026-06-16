@@ -1,0 +1,21 @@
+runner_defaults:
+  auto_remove: true
+  read_only_rootfs: false
+  privileged: false
+  network_mode: "bridge"
+  cpu_limit: 2
+  memory_limit: "2g"
+  pids_limit: 512
+  timeout_seconds: 1800
+
+mounts:
+  input_readonly: true
+  output_writable: true
+  docker_socket: false
+
+cleanup:
+  remove_container: true
+  remove_temp_volume: true
+  collect_artifacts_before_remove: true
+  force_remove_after_seconds: 30
+

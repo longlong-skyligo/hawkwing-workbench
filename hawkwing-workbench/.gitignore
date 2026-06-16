@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+dist/
+data/artifacts/*
+data/reports/*
+data/workspaces/*
+!data/artifacts/.gitkeep
+!data/reports/.gitkeep
+!data/workspaces/.gitkeep
+

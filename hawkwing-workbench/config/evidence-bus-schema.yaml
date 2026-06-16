@@ -1,0 +1,40 @@
+workspace_state:
+  event_types:
+    - asset.discovered
+    - service.discovered
+    - finding.created
+    - finding.confirmed
+    - evidence.created
+    - credential.reference.created
+    - session.reference.created
+    - pivot.session.registered
+    - proof.marker.created
+    - webshell.indicator.detected
+    - attack_path.node.created
+    - attack_path.edge.created
+    - execution_plan.created
+    - runner.started
+    - runner.completed
+    - runner.cleaned
+  event_schema:
+    workspace_id: integer
+    event_type: string
+    source: string
+    target_ref: string
+    data: object
+    created_at: datetime
+
+evidence_contract:
+  required_files:
+    - result.json
+    - commands.log
+  optional_files:
+    - timeline.json
+    - stdout.log
+    - stderr.log
+  directories:
+    - evidence/http
+    - evidence/screenshots
+    - evidence/files
+    - evidence/pcap
+    - evidence/forensics

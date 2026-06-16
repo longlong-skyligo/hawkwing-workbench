@@ -1,0 +1,23 @@
+tools:
+  nuclei:
+    version: "v3.9.0"
+    runner: "hawkwing-runner-web:latest"
+  httpx:
+    version: "v1.9.0"
+    runner: "hawkwing-runner-recon:latest"
+  naabu:
+    version: "v2.6.1"
+    runner: "hawkwing-runner-recon:latest"
+  subfinder:
+    version: "v2.14.0"
+    runner: "hawkwing-runner-recon:latest"
+  katana:
+    version: "v1.6.1"
+    runner: "hawkwing-runner-web:latest"
+  ffuf:
+    version: "v2.1.0"
+    runner: "hawkwing-runner-web:latest"
+  nmap:
+    version: "7.95"
+    runner: "hawkwing-runner-recon:latest"
+

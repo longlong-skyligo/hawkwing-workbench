@@ -1,0 +1,39 @@
+dynamic_runner_policy:
+  enabled: true
+  require_human_approval: true
+  prefer_stock_runner: true
+  allow_build_from_dockerfile: true
+  allow_external_image_pull: true
+  deny_latest_tag: true
+  require_digest_for_high_risk: false
+  allowed_registries:
+    - docker.io
+    - ghcr.io
+  allowed_base_images:
+    - debian:12-slim
+    - ubuntu:24.04
+    - python:3.12-slim
+    - node:24.16.0-alpine
+  denied_dockerfile_patterns:
+    - "privileged"
+    - "/var/run/docker.sock"
+    - "docker.sock"
+    - "--net=host"
+    - "network=host"
+    - "curl | bash"
+    - "wget | bash"
+    - "systemctl"
+  default_runtime:
+    privileged: false
+    network_mode: bridge
+    read_only_rootfs: false
+    cpu_limit: 2
+    memory_limit: "2g"
+    pids_limit: 512
+    timeout_seconds: 1800
+  cleanup:
+    remove_container: true
+    remove_temp_volume: true
+    keep_build_log: true
+    keep_dockerfile: true
+

@@ -1,0 +1,17 @@
+policies:
+  quick:
+    description: "快速摸底，适合比赛初期"
+    ports: "top-100"
+    web_crawl: false
+    nuclei_severity: "critical,high"
+  standard:
+    description: "速度和深度平衡，推荐默认使用"
+    ports: "top-1000"
+    web_crawl: true
+    nuclei_severity: "critical,high,medium"
+  deep:
+    description: "更全面，耗时更长"
+    ports: "1-65535"
+    web_crawl: true
+    nuclei_severity: "critical,high,medium,low"
+

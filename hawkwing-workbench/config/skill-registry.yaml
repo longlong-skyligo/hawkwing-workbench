@@ -1,0 +1,168 @@
+skills:
+  external-recon:
+    name: "External target reconnaissance"
+    runner_profile: runner-recon-basic
+    risk_level: low
+    requires_approval: false
+    allowed_tools: [nmap, naabu, httpx, subfinder, dnsx, whatweb]
+    output_schema: [assets, services, findings]
+    runbook:
+      - "Normalize imported targets."
+      - "Discover reachable services."
+      - "Write assets and services to workspace state."
+
+  web-validation:
+    name: "Web vulnerability validation"
+    runner_profile: runner-web-basic
+    risk_level: medium
+    requires_approval: true
+    allowed_tools: [nuclei, ffuf, katana, dirsearch, feroxbuster, testssl]
+    output_schema: [findings, http_evidence, timeline]
+    runbook:
+      - "Confirm target web reachability."
+      - "Validate scanner findings with low-impact checks."
+      - "Record request and response evidence."
+
+  advanced-web-validation:
+    name: "Approved advanced web validation"
+    runner_profile: runner-web-advanced
+    risk_level: high
+    requires_approval: true
+    allowed_tools: [zap-baseline, sqlmap, arjun, dalfox, nikto]
+    output_schema: [findings, proof, http_evidence]
+    runbook:
+      - "Execute only after manual approval."
+      - "Limit concurrency and request rate."
+      - "Collect proof without destructive actions."
+
+  internal-network-recon:
+    name: "Internal network enumeration"
+    runner_profile: runner-recon-basic
+    risk_level: medium
+    requires_approval: true
+    allowed_tools: [nmap, naabu, httpx, smbclient]
+    output_schema: [assets, services, routes]
+    runbook:
+      - "Use competition-provided internal ranges only."
+      - "Respect per-target concurrency limits."
+      - "Feed discovered services into attack path graph."
+
+  ad-enumeration:
+    name: "Active Directory authorized enumeration"
+    runner_profile: runner-ad-basic
+    risk_level: high
+    requires_approval: true
+    allowed_tools: [bloodhound-python, ldapsearch, smbclient, enum4linux-ng, netexec, impacket, certipy]
+    output_schema: [domain, users, groups, computers, attack_paths]
+    runbook:
+      - "Use provided credentials or explicitly approved assumed-breach context."
+      - "Collect relationship data and shares."
+      - "Write paths to shared attack graph."
+
+  linux-privesc-enum:
+    name: "Linux privilege escalation enumeration"
+    runner_profile: runner-linux-privesc
+    risk_level: medium
+    requires_approval: true
+    allowed_tools: [linpeas, linux-smart-enumeration, pspy]
+    output_schema: [privilege_findings, misconfigurations, evidence]
+    runbook:
+      - "Run enumeration only within provided access context."
+      - "Avoid persistence and destructive checks."
+      - "Summarize actionable misconfigurations."
+
+  windows-privesc-enum:
+    name: "Windows privilege escalation enumeration"
+    runner_profile: runner-windows-privesc
+    risk_level: medium
+    requires_approval: true
+    allowed_tools: [winpeas, seatbelt, accesschk]
+    output_schema: [privilege_findings, misconfigurations, evidence]
+    runbook:
+      - "Run enumeration only within provided access context."
+      - "Collect service, privilege, and configuration evidence."
+      - "Do not perform persistence or credential extraction by default."
+
+  traffic-forensics:
+    name: "Traffic and pcap forensics"
+    runner_profile: runner-traffic-basic
+    risk_level: low
+    requires_approval: false
+    allowed_tools: [tshark, zeek, suricata, capinfos]
+    output_schema: [conversations, alerts, indicators]
+    runbook:
+      - "Parse pcap artifacts."
+      - "Extract conversations and suspicious indicators."
+      - "Link indicators to findings."
+
+  file-memory-forensics:
+    name: "File, firmware, and memory forensics"
+    runner_profile: runner-forensics-basic
+    risk_level: low
+    requires_approval: false
+    allowed_tools: [volatility3, sleuthkit, binwalk, exiftool, bulk-extractor, foremost]
+    output_schema: [artifacts, indicators, extracted_files]
+    runbook:
+      - "Classify artifact type."
+      - "Run non-destructive analysis."
+      - "Store extracted metadata and hashes."
+
+  pwn-reverse-support:
+    name: "Pwn and reverse engineering support"
+    runner_profile: runner-pwn-rev-basic
+    risk_level: low
+    requires_approval: false
+    allowed_tools: [pwntools, gdb, radare2, checksec, ropgadget]
+    output_schema: [binary_metadata, protections, notes]
+    runbook:
+      - "Identify binary metadata and protections."
+      - "Collect static analysis notes."
+      - "Generate evidence for writeup."
+
+  dynamic-runner-build:
+    name: "Dynamic runner image planning"
+    runner_profile: runner-dynamic
+    risk_level: high
+    requires_approval: true
+    allowed_tools: []
+    output_schema: [dockerfile, policy_result, build_log]
+    runbook:
+      - "Use only when stock runners cannot satisfy the task."
+      - "Generate Dockerfile or external image proposal."
+      - "Require policy checks and human approval before build or pull."
+
+  webshell-detection:
+    name: "WebShell detection and evidence review"
+    runner_profile: runner-web-basic
+    risk_level: low
+    requires_approval: false
+    allowed_tools: [webshell-detector, nuclei, curl]
+    output_schema: [suspicious_files, indicators, evidence]
+    runbook:
+      - "Analyze uploaded files, responses, and authorized web-root artifacts."
+      - "Flag suspicious WebShell indicators."
+      - "Do not generate or deploy WebShell payloads."
+
+  controlled-access-proof:
+    name: "Controlled proof of access"
+    runner_profile: runner-web-advanced
+    risk_level: medium
+    requires_approval: true
+    allowed_tools: [controlled-proof-marker]
+    output_schema: [proof_marker, evidence, timeline]
+    runbook:
+      - "Use non-malicious proof markers in authorized CTF/lab environments."
+      - "Avoid persistence, stealth, or payload generation."
+      - "Record proof and remediation notes."
+
+  pivot-session-registration:
+    name: "Approved pivot or proxy session registration"
+    runner_profile: runner-pivot-proxy
+    risk_level: high
+    requires_approval: true
+    allowed_tools: [chisel, ligolo-ng, proxychains]
+    output_schema: [session_reference, route_notes, evidence]
+    runbook:
+      - "Register approved session metadata in the platform."
+      - "Associate session with target, approval reference, and evidence."
+      - "Do not auto-establish covert channels without explicit operator approval."
