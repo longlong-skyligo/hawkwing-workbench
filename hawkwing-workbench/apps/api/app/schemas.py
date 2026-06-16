@@ -6,6 +6,11 @@ class WorkspaceCreate(BaseModel):
     description: str = ""
 
 
+class WorkspaceUpdate(BaseModel):
+    name: str
+    description: str = ""
+
+
 class WorkspaceOut(BaseModel):
     id: int
     name: str
@@ -67,3 +72,7 @@ class SessionReferenceCreate(BaseModel):
     status: str = "registered"
     approval_ref: str = ""
     notes: str = ""
+
+
+class IntakeAnalyzeRequest(BaseModel):
+    description: str = ""

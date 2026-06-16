@@ -16,7 +16,7 @@ class RunnerManager:
         self.settings = get_settings()
         self.client = docker.from_env()
 
-    def run_validation(self, job_id: int, workspace_id: int, target: str, finding_id: int, image: str) -> dict:
+    def run_validation(self, job_id: int, workspace_id: int, target: str, finding_id: int, image: str, plan_context: dict | None = None) -> dict:
         artifact_dir = Path(self.settings.artifact_root) / f"workspace-{workspace_id}" / f"pentest-job-{job_id}"
         artifact_dir.mkdir(parents=True, exist_ok=True)
         self._ensure_image_available(image)
@@ -27,6 +27,7 @@ class RunnerManager:
             "target": target,
             "finding_id": finding_id,
             "mode": "controlled_validation",
+            "plan_context": plan_context or {},
         }
         (artifact_dir / "input.json").write_text(json.dumps(input_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -39,6 +40,11 @@ class RunnerManager:
             mem_limit="2g",
             nano_cpus=2_000_000_000,
             network_mode="bridge",
+            labels={
+                "hawkwing-workspace": str(workspace_id),
+                "hawkwing-job": str(job_id),
+                "hawkwing-runner": "true",
+            },
         )
         result = container.wait(timeout=1800)
         logs = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")

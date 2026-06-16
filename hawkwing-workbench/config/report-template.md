@@ -1,12 +1,12 @@
-# {{ workspace_name }} 外部靶场渗透测试报告
+# {{ workspace_name }} 攻防解题报告
 
-## 1. 测试概览
+## 1. 项目概况
 
-- 工作空间：{{ workspace_name }}
-- 状态：{{ status }}
+- 项目名称：{{ workspace_name }}
+- 项目状态：{{ status }}
 - 目标数量：{{ target_count }}
 - 漏洞数量：{{ finding_count }}
-- 验证任务数量：{{ pentest_job_count }}
+- Runner 任务数量：{{ pentest_job_count }}
 - 工具目录数量：{{ tool_count }}
 - Runner Profile 数量：{{ runner_profile_count }}
 - AI Skill/Runbook 数量：{{ skill_count }}
@@ -17,7 +17,7 @@
 - {{ target.value }}（{{ target.type }}）
 {% endfor %}
 
-## 3. 漏洞总览
+## 3. 漏洞发现
 
 | 编号 | 目标 | 标题 | 风险 | 置信度 | 状态 |
 |---|---|---|---|---|---|
@@ -25,7 +25,7 @@
 | {{ finding.id }} | {{ finding.target }} | {{ finding.title }} | {{ finding.severity }} | {{ finding.confidence }} | {{ finding.status }} |
 {% endfor %}
 
-## 4. 并行渗透验证结果
+## 4. Runner 执行结果
 
 | 任务 | 漏洞 | Runner Profile | Runner Image | 状态 | 摘要 |
 |---|---|---|---|---|---|
@@ -33,7 +33,21 @@
 | {{ job.id }} | {{ job.finding_id }} | {{ job.runner_profile }} | {{ job.runner_image }} | {{ job.status }} | {{ job.result_summary }} |
 {% endfor %}
 
-## 5. 执行计划
+## 5. 候选 Flag
+
+{% if flags %}
+{% for item in flags %}
+```text
+{{ item.flag }}
+```
+
+- 来源：任务 {{ item.job_id }} / {{ item.source }} / {{ item.target }}
+{% endfor %}
+{% else %}
+暂无候选 flag。请继续查看 Runner 证据和 AI 分析建议。
+{% endif %}
+
+## 6. 执行计划
 
 {% for plan in execution_plans %}
 ### Plan {{ plan.id }} - {{ plan.status }}
@@ -44,14 +58,6 @@
 
 {% endfor %}
 
-## 6. 共享状态事件摘要
-
-| 事件 | 来源 | 目标 | 时间 |
-|---|---|---|---|
-{% for event in state_events %}
-| {{ event.event_type }} | {{ event.source }} | {{ event.target_ref }} | {{ event.created_at }} |
-{% endfor %}
-
 ## 7. 证据索引
 
 | 编号 | 类型 | 任务 | SHA256 | 路径 |
@@ -60,15 +66,15 @@
 | {{ evidence.id }} | {{ evidence.file_type }} | {{ evidence.pentest_job_id }} | {{ evidence.sha256 }} | {{ evidence.path }} |
 {% endfor %}
 
-## 8. 会话/隧道登记
+## 8. 状态事件
 
-| 编号 | 类型 | 目标 | 工具 | 状态 | 审批引用 |
-|---|---|---|---|---|---|
-{% for session in sessions %}
-| {{ session.id }} | {{ session.session_type }} | {{ session.target }} | {{ session.tool }} | {{ session.status }} | {{ session.approval_ref }} |
+| 事件 | 来源 | 目标 | 时间 |
+|---|---|---|---|
+{% for event in state_events %}
+| {{ event.event_type }} | {{ event.source }} | {{ event.target_ref }} | {{ event.created_at }} |
 {% endfor %}
 
-## 9. 防守建议
+## 9. 复盘建议
 
 {{ ai_summary }}
 

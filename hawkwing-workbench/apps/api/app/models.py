@@ -96,6 +96,19 @@ class EvidenceFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class WorkspaceAttachment(Base):
+    __tablename__ = "workspace_attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"))
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(200), default="")
+    path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(128), default="")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
@@ -171,6 +184,19 @@ class AttackPathEdge(Base):
     relation: Mapped[str] = mapped_column(String(200), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     data_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class RunnerAISession(Base):
+    __tablename__ = "runner_ai_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey("workspaces.id"))
+    pentest_job_id: Mapped[int] = mapped_column(ForeignKey("pentest_jobs.id"))
+    round_num: Mapped[int] = mapped_column(Integer, default=0)
+    role: Mapped[str] = mapped_column(String(50), default="ai")
+    content: Mapped[str] = mapped_column(Text, default="")
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

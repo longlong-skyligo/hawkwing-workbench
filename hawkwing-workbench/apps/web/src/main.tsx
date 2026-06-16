@@ -1,36 +1,52 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Activity, Bot, Boxes, FileText, Globe2, Link, Play, Radar, Save, Settings, ShieldCheck, Workflow, X } from 'lucide-react'
+import {
+  Activity,
+  Bot,
+  CheckCircle2,
+  Clipboard,
+  Copy,
+  Download,
+  FileText,
+  FolderPlus,
+  Loader2,
+  Play,
+  Radar,
+  Settings,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  X
+} from 'lucide-react'
 import './styles.css'
 
 const API = import.meta.env.VITE_API_BASE || ''
 
-type Lang = 'zh' | 'en'
 type Workspace = { id: number; name: string; description: string; status: string }
-type Finding = { id: number; target: string; title: string; severity: string; confidence: number; risk_score: number; status: string; source_tool: string }
+type Target = { id: number; type: string; value: string; enabled: number }
+type Finding = { id: number; target: string; title: string; severity: string; confidence: number; risk_score: number; status: string; source_tool: string; raw_detail?: string }
 type PentestJob = { id: number; finding_id: number; target: string; runner_image: string; runner_profile: string; status: string; result_summary: string }
-type Stage = { key: string; label: string; status: string; count: number }
 type Evidence = { id: number; file_type: string; path: string; sha256: string; pentest_job_id?: number }
-type SessionRef = { id: number; session_type: string; target: string; tool: string; status: string; approval_ref: string; notes: string }
+type Writeup = { id: number; pentest_job_id: number; path: string; sha256: string; download_url: string }
+type Stage = { key: string; label: string; status: string; count: number }
+type FlagHit = { flag: string; source: string; job_id: number; target: string; runner_profile: string }
 type ProviderDefaults = Record<string, { label: string; api_base: string; model: string; compatible: string }>
 type AIConfig = {
   provider: string
-  provider_label: string
   providers: ProviderDefaults
   api_base: string
-  api_base_configured: boolean
   api_key_configured: boolean
   api_key_masked: string
   model: string
   source: string
 }
+type AIReady = { ready: boolean; provider: string; model: string; error?: string; message?: string }
 type ExecutionPlan = {
   id: number
   status: string
   risk_summary: string
   plan: {
     ai_initial_analysis?: string
-    recommended_parallelism?: { total_containers: number; max_parallel: number; per_target_limit: number; high_risk_max: number }
     containers?: Array<{
       name: string
       runner_profile: string
@@ -40,135 +56,31 @@ type ExecutionPlan = {
       targets: string[]
       ai_recommendation?: { rationale: string; focus_tools: string[]; next_checks: string[]; confidence: number; fallback_runner: string }
     }>
-    dynamic_images?: Array<{ name: string; base_image: string; policy_allowed: boolean; policy_reasons: string[] }>
   }
 }
 
-const text = {
-  zh: {
-    product: '鹰翼外部靶场 AI 攻防工作台',
-    subtitle: '扫描、复核、评估容器方案、人工批准执行、沉淀证据并生成报告。',
-    newWorkspace: '新建工作区',
-    workspaces: '工作区',
-    aiConfigured: 'AI 已配置',
-    aiMissing: 'AI 未配置',
-    configureAI: '配置 AI',
-    language: '语言',
-    stage: '阶段可视化',
-    targets: '目标',
-    importTargets: '导入目标',
-    startScan: '启动标准扫描',
-    findings: '漏洞发现',
-    noFindings: '暂无发现。请先导入目标并启动扫描。',
-    planAssessment: '执行前容器评估',
-    aiInitialAnalysis: 'AI 初步判题分析',
-    aiRationale: 'AI 推荐理由',
-    nextChecks: '建议检查',
-    assessPlan: '评估选中漏洞的执行方案',
-    approvePlan: '批准最新方案',
-    executePlan: '执行最新方案',
-    runnerJobs: 'Runner 任务',
-    noJobs: '暂无 Runner 任务。',
-    sessions: '授权会话登记',
-    sessionTarget: '目标或路由',
-    sessionTool: '已批准工具',
-    registerSession: '登记会话引用',
-    noSessions: '暂无授权会话引用。',
-    evidence: '证据索引',
-    noEvidence: 'Runner 任务完成后会在这里出现证据。',
-    report: '报告',
-    reportDesc: '根据漏洞、执行计划、Runner 任务和证据引用生成 Markdown 报告。',
-    generateReport: '生成 Markdown 报告',
-    emptyTitle: '外部靶场工作台',
-    selected: '已选',
-    policyOk: '策略通过',
-    policyBlocked: '策略阻断',
-    requiresApproval: '需要人工批准',
-    noApprovalRef: '无批准引用',
-    aiSettings: 'AI 配置',
-    provider: '供应商',
-    apiKey: 'API Key',
-    apiKeyHint: '留空表示保持现有密钥',
-    baseUrl: 'Base URL',
-    baseUrlHint: '官方供应商自动填写；自定义供应商需要填写 OpenAI-compatible 地址。',
-    model: '模型',
-    source: '来源',
-    save: '保存',
-    close: '关闭',
-    saved: 'AI 配置已保存',
-    workspaceCreated: '工作区已创建',
-    targetsImported: '个目标已导入',
-    scanQueued: '扫描任务已排队',
-    planCreated: '执行方案已创建',
-    planApproved: '执行方案已批准',
-    planSubmitted: '执行方案已提交',
-    sessionRegistered: '会话引用已登记',
-    reportGenerated: '报告已生成',
-    stageLabels: { targets: '目标', scan: '扫描', review: '复核', plan: '计划', execute: '执行', evidence: '证据', sessions: '会话', report: '报告' },
-    statusLabels: { pending: '待处理', active: '进行中', done: '完成', queued: '排队中', running: '运行中', completed: '完成', draft: '草稿', approved: '已批准', executing: '执行中' }
-  },
-  en: {
-    product: 'HawkWing External Range AI Workbench',
-    subtitle: 'Scan, review, assess container plans, approve execution, collect evidence, and generate reports.',
-    newWorkspace: 'New workspace',
-    workspaces: 'Workspaces',
-    aiConfigured: 'AI configured',
-    aiMissing: 'AI not configured',
-    configureAI: 'Configure AI',
-    language: 'Language',
-    stage: 'Stage Visualization',
-    targets: 'Targets',
-    importTargets: 'Import targets',
-    startScan: 'Start standard scan',
-    findings: 'Findings',
-    noFindings: 'No findings yet. Import targets and start a scan.',
-    planAssessment: 'Execution Plan Assessment',
-    aiInitialAnalysis: 'AI Initial Analysis',
-    aiRationale: 'AI Rationale',
-    nextChecks: 'Recommended Checks',
-    assessPlan: 'Assess plan for selected findings',
-    approvePlan: 'Approve latest plan',
-    executePlan: 'Execute latest plan',
-    runnerJobs: 'Runner Jobs',
-    noJobs: 'No runner jobs yet.',
-    sessions: 'Approved Session Registry',
-    sessionTarget: 'target or route',
-    sessionTool: 'approved tool',
-    registerSession: 'Register session reference',
-    noSessions: 'No approved session references yet.',
-    evidence: 'Evidence Index',
-    noEvidence: 'Evidence will appear after runner jobs complete.',
-    report: 'Report',
-    reportDesc: 'Generate a Markdown report from findings, execution plans, runner jobs, and evidence references.',
-    generateReport: 'Generate Markdown report',
-    emptyTitle: 'External Range Workbench',
-    selected: 'selected',
-    policyOk: 'policy ok',
-    policyBlocked: 'policy blocked',
-    requiresApproval: 'requires approval',
-    noApprovalRef: 'no approval ref',
-    aiSettings: 'AI Settings',
-    provider: 'Provider',
-    apiKey: 'API Key',
-    apiKeyHint: 'Leave blank to keep the current key',
-    baseUrl: 'Base URL',
-    baseUrlHint: 'Official providers are auto-filled. Custom providers require an OpenAI-compatible endpoint.',
-    model: 'Model',
-    source: 'Source',
-    save: 'Save',
-    close: 'Close',
-    saved: 'AI configuration saved',
-    workspaceCreated: 'Workspace created',
-    targetsImported: 'targets imported',
-    scanQueued: 'Scan job queued',
-    planCreated: 'Execution plan created',
-    planApproved: 'Execution plan approved',
-    planSubmitted: 'Execution plan submitted',
-    sessionRegistered: 'Session reference registered',
-    reportGenerated: 'Report generated',
-    stageLabels: { targets: 'Targets', scan: 'Scan', review: 'Review', plan: 'Plan', execute: 'Execute', evidence: 'Evidence', sessions: 'Sessions', report: 'Report' },
-    statusLabels: { pending: 'pending', active: 'active', done: 'done', queued: 'queued', running: 'running', completed: 'completed', draft: 'draft', approved: 'approved', executing: 'executing' }
-  }
+const progressLabels: Record<string, string> = {
+  targets: '目标',
+  intake: 'AI读题',
+  scan: '扫描',
+  findings: '漏洞',
+  plan: '方案',
+  execute: '执行',
+  evidence: '证据',
+  report: '报告'
+}
+
+const statusText: Record<string, string> = {
+  pending: '待处理',
+  active: '进行中',
+  done: '完成',
+  queued: '排队中',
+  running: '运行中',
+  completed: '完成',
+  failed: '失败',
+  draft: '待确认',
+  approved: '已确认',
+  executing: '执行中'
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -176,66 +88,80 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init
   })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(text)
+  }
+  return response.json()
+}
+
+async function apiForm<T>(path: string, body: FormData): Promise<T> {
+  const response = await fetch(`${API}${path}`, { method: 'POST', body })
   if (!response.ok) throw new Error(await response.text())
   return response.json()
 }
 
 function App() {
-  const [lang, setLang] = useState<Lang>('zh')
-  const copy = text[lang]
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [projects, setProjects] = useState<Workspace[]>([])
   const [active, setActive] = useState<Workspace | null>(null)
-  const [targets, setTargets] = useState('10.10.10.5\nhttp://target.example')
-  const [scenario, setScenario] = useState('外部靶场 Web 验证。可在这里补充 AD、取证、固件、云、代理、提权等题目信息。')
+  const [projectName, setProjectName] = useState('Web CTF 项目')
+  const [projectDesc, setProjectDesc] = useState('请在这里粘贴题目要求、靶场地址、flag 格式、附件说明和比赛限制。')
+  const [files, setFiles] = useState<FileList | null>(null)
+  const [uploadedCount, setUploadedCount] = useState(0)
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('Web CTF 项目')
+  const [newProjectDesc, setNewProjectDesc] = useState('请在这里粘贴题目要求、靶场地址、flag 格式、附件说明和比赛限制。')
+  const [targets, setTargets] = useState<Target[]>([])
   const [findings, setFindings] = useState<Finding[]>([])
   const [jobs, setJobs] = useState<PentestJob[]>([])
   const [plans, setPlans] = useState<ExecutionPlan[]>([])
-  const [stages, setStages] = useState<Stage[]>([])
   const [evidence, setEvidence] = useState<Evidence[]>([])
-  const [sessions, setSessions] = useState<SessionRef[]>([])
-  const [selected, setSelected] = useState<number[]>([])
-  const [sessionTarget, setSessionTarget] = useState('10.10.10.5')
-  const [sessionTool, setSessionTool] = useState('approved-proxy')
+  const [writeups, setWriteups] = useState<Writeup[]>([])
+  const [stages, setStages] = useState<Stage[]>([])
+  const [flags, setFlags] = useState<FlagHit[]>([])
+  const [aiReady, setAiReady] = useState<AIReady | null>(null)
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiForm, setAiForm] = useState({ provider: 'openai', api_base: '', api_key: '', model: 'gpt-4.1-mini' })
-  const [catalogInfo, setCatalogInfo] = useState({ tools: 0, runners: 0, skills: 0 })
   const [message, setMessage] = useState('')
-
-  const selectedCount = useMemo(() => selected.length, [selected])
+  const [busy, setBusy] = useState('')
+  const [reportUrl, setReportUrl] = useState('')
+  const autoAssessRef = useRef<number | null>(null)
   const latestPlan = plans[0]
-  const providers = aiConfig?.providers || {}
-  const selectedProvider = providers[aiForm.provider]
-  const customProvider = aiForm.provider === 'custom'
+  const allFindingIds = useMemo(() => findings.map((item) => item.id), [findings])
 
-  function statusLabel(value: string) {
-    return copy.statusLabels[value as keyof typeof copy.statusLabels] || value
-  }
-
-  async function refresh() {
-    const ws = await api<Workspace[]>('/api/workspaces')
-    setWorkspaces(ws)
-    const current = active || ws[0] || null
-    if (!active && current) setActive(current)
-    if (current) {
-      setFindings(await api<Finding[]>(`/api/workspaces/${current.id}/findings`))
-      setJobs(await api<PentestJob[]>(`/api/workspaces/${current.id}/pentest-jobs`))
-      setPlans(await api<ExecutionPlan[]>(`/api/workspaces/${current.id}/execution-plans`))
-      const stageResult = await api<{ stages: Stage[] }>(`/api/workspaces/${current.id}/stage-summary`)
-      setStages(stageResult.stages)
-      setEvidence(await api<Evidence[]>(`/api/workspaces/${current.id}/evidence`))
-      setSessions(await api<SessionRef[]>(`/api/workspaces/${current.id}/sessions`))
-    }
-    const config = await api<AIConfig>('/api/ai/config')
+  async function refresh(current = active) {
+    const [ws, ready, config] = await Promise.all([
+      api<Workspace[]>('/api/workspaces'),
+      api<AIReady>('/api/ai/ready').catch((err) => ({ ready: false, provider: '-', model: '-', error: err.message })),
+      api<AIConfig>('/api/ai/config')
+    ])
+    setProjects(ws)
+    setAiReady(ready)
     setAiConfig(config)
-    const tools = await api<{ tools: Record<string, unknown> }>('/api/tools/catalog')
-    const runners = await api<{ runner_profiles: Record<string, unknown> }>('/api/runners/profiles')
-    const skills = await api<{ skills: Record<string, unknown> }>('/api/skills')
-    setCatalogInfo({
-      tools: Object.keys(tools.tools || {}).length,
-      runners: Object.keys(runners.runner_profiles || {}).length,
-      skills: Object.keys(skills.skills || {}).length
-    })
+    const selected = current || active || ws[0] || null
+    if (!active && selected) setActive(selected)
+    if (!selected) return
+    const [targetData, findingData, jobData, planData, evidenceData, stageData, flagData, writeupData] = await Promise.all([
+      api<Target[]>(`/api/workspaces/${selected.id}/targets`),
+      api<Finding[]>(`/api/workspaces/${selected.id}/findings`),
+      api<PentestJob[]>(`/api/workspaces/${selected.id}/pentest-jobs`),
+      api<ExecutionPlan[]>(`/api/workspaces/${selected.id}/execution-plans`),
+      api<Evidence[]>(`/api/workspaces/${selected.id}/evidence`),
+      api<{ stages: Stage[] }>(`/api/workspaces/${selected.id}/stage-summary`),
+      api<{ flags: FlagHit[] }>(`/api/workspaces/${selected.id}/flags`),
+      api<Writeup[]>(`/api/workspaces/${selected.id}/writeups`)
+    ])
+    setTargets(targetData)
+    setFindings(findingData)
+    setJobs(jobData)
+    setPlans(planData)
+    setEvidence(evidenceData)
+    setWriteups(writeupData)
+    setStages(stageData.stages)
+    setFlags(flagData.flags)
+    setProjectName(selected.name)
+    setProjectDesc(selected.description || '')
   }
 
   useEffect(() => {
@@ -244,354 +170,437 @@ function App() {
     return () => clearInterval(timer)
   }, [active?.id])
 
+  // 自动评估：发现漏洞且无方案时，自动触发 AI 评估
+  useEffect(() => {
+    if (!active || !aiReady?.ready || findings.length === 0 || plans.length > 0) return
+    if (autoAssessRef.current === active.id) return
+    autoAssessRef.current = active.id
+    const autoAssess = async () => {
+      try {
+        setBusy('plan')
+        await api(`/api/workspaces/${active.id}/execution-plans/assess`, {
+          method: 'POST',
+          body: JSON.stringify({ finding_ids: findings.map(f => f.id), scenario_text: projectDesc, allow_dynamic: true })
+        })
+        setMessage('AI 已自动生成解题方案，请人工确认后执行')
+        await refresh(active)
+      } catch (err) {
+        setMessage(String(err))
+      } finally {
+        setBusy('')
+      }
+    }
+    autoAssess()
+  }, [findings.length, plans.length, aiReady?.ready])
+
+  function requireReady() {
+    if (!aiReady?.ready) {
+      setMessage(`AI 未连通：${aiReady?.error || '请先配置 API Key 并通过连通性检查。'}`)
+      return false
+    }
+    return true
+  }
+
+  async function createProject() {
+    if (!requireReady()) return
+    setBusy('create')
+    setNewProjectOpen(false)
+    try {
+      const ws = await api<Workspace>('/api/workspaces', {
+        method: 'POST',
+        body: JSON.stringify({ name: newProjectName, description: newProjectDesc })
+      })
+      for (const file of Array.from(files || [])) {
+        const form = new FormData()
+        form.append('file', file)
+        await apiForm(`/api/workspaces/${ws.id}/attachments`, form)
+      }
+      setActive(ws)
+      setMessage(`项目 #${ws.id} 已创建`)
+      await refresh(ws)
+    } catch (err) {
+      setMessage(String(err))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function deleteProject(ws: Workspace) {
+    if (!confirm(`确定要删除项目 #${ws.id}「${ws.name}」吗？此操作不可撤销。`)) return
+    try {
+      await api(`/api/workspaces/${ws.id}`, { method: 'DELETE' })
+      if (active?.id === ws.id) setActive(null)
+      setMessage(`项目 #${ws.id} 已删除`)
+      setProjects((prev) => prev.filter((p) => p.id !== ws.id))
+    } catch (err) {
+      setMessage(String(err))
+    }
+  }
+
+  async function startTask() {
+    if (!active || !requireReady()) return
+    setBusy('start')
+    try {
+      // 1. 保存项目信息
+      const ws = await api<Workspace>(`/api/workspaces/${active.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: projectName, description: projectDesc })
+      })
+      // 2. 上传附件（如果有）
+      let count = 0
+      for (const file of Array.from(files || [])) {
+        const form = new FormData()
+        form.append('file', file)
+        await apiForm(`/api/workspaces/${active.id}/attachments`, form)
+        count++
+      }
+      if (count > 0) {
+        setUploadedCount(count)
+        setFiles(null)
+      }
+      // 3. AI 读题生成目标
+      const intakeForm = new FormData()
+      intakeForm.append('description', projectDesc)
+      const intakeResult = await apiForm<{ summary: string; imported: number; targets: string[] }>(`/api/workspaces/${active.id}/intake/analyze`, intakeForm)
+      setMessage(`任务已启动：AI 识别 ${intakeResult.targets.length} 个目标 → 开始扫描漏洞`)
+      // 4. 自动启动漏洞扫描
+      await api(`/api/workspaces/${active.id}/scan/start`, { method: 'POST', body: JSON.stringify({ mode: 'standard' }) })
+      autoAssessRef.current = null
+      await refresh(active)
+    } catch (err) {
+      setMessage(String(err))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function assessAll() {
+    if (!active || !requireReady() || allFindingIds.length === 0) return
+    setBusy('plan')
+    await api(`/api/workspaces/${active.id}/execution-plans/assess`, {
+      method: 'POST',
+      body: JSON.stringify({ finding_ids: allFindingIds, scenario_text: projectDesc, allow_dynamic: true })
+    })
+    setMessage('AI 已生成针对性解题方案，请确认是否执行')
+    await refresh(active)
+    setBusy('')
+  }
+
+  async function approveAndExecute() {
+    if (!latestPlan || !requireReady()) return
+    setBusy('execute')
+    if (latestPlan.status === 'draft') {
+      await api(`/api/execution-plans/${latestPlan.id}/approve`, { method: 'POST', body: JSON.stringify({ approved_by: 'operator' }) })
+    }
+    await api(`/api/execution-plans/${latestPlan.id}/execute`, { method: 'POST' })
+    setMessage('已确认执行，平台正在准备 Runner 并解题')
+    setTimeout(() => refresh(active), 2500)
+    setBusy('')
+  }
+
+  async function generateReport() {
+    if (!active || !requireReady()) return
+    const result = await api<{ report_path: string; download_url: string }>(`/api/workspaces/${active.id}/report/generate`, { method: 'POST' })
+    setReportUrl(result.download_url)
+    setMessage('报告已生成，可点击下载')
+    await refresh(active)
+  }
+
+  async function saveAiConfig() {
+    const saved = await api<AIConfig>('/api/ai/config', { method: 'PUT', body: JSON.stringify(aiForm) })
+    setAiConfig(saved)
+    setAiOpen(false)
+    await refresh()
+  }
+
   function openAiSettings() {
-    const config = aiConfig
     setAiForm({
-      provider: config?.provider || 'openai',
-      api_base: config?.api_base || config?.providers?.openai?.api_base || '',
+      provider: aiConfig?.provider || 'openai',
+      api_base: aiConfig?.api_base || aiConfig?.providers?.openai?.api_base || '',
       api_key: '',
-      model: config?.model || config?.providers?.openai?.model || 'gpt-4.1-mini'
+      model: aiConfig?.model || aiConfig?.providers?.openai?.model || 'gpt-4.1-mini'
     })
     setAiOpen(true)
   }
 
   function chooseProvider(provider: string) {
-    const next = providers[provider]
+    const defaults = aiConfig?.providers?.[provider]
     setAiForm({
       ...aiForm,
       provider,
-      api_base: provider === 'custom' ? aiForm.api_base : next?.api_base || '',
-      model: next?.model || aiForm.model
+      api_base: provider === 'custom' ? aiForm.api_base : defaults?.api_base || '',
+      model: defaults?.model || aiForm.model
     })
   }
 
-  async function saveAiConfig() {
-    const saved = await api<AIConfig>('/api/ai/config', {
-      method: 'PUT',
-      body: JSON.stringify(aiForm)
-    })
-    setAiConfig(saved)
-    setAiOpen(false)
-    setMessage(copy.saved)
-  }
-
-  async function createWorkspace() {
-    const ws = await api<Workspace>('/api/workspaces', {
-      method: 'POST',
-      body: JSON.stringify({ name: `range-${new Date().toISOString().slice(0, 19)}`, description: 'Temporary external range workspace' })
-    })
-    setActive(ws)
-    setMessage(`${copy.workspaceCreated} #${ws.id}`)
-    await refresh()
-  }
-
-  async function importTargets() {
-    if (!active) return
-    const list = targets.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)
-    await api(`/api/workspaces/${active.id}/targets/import`, {
-      method: 'POST',
-      body: JSON.stringify({ targets: list })
-    })
-    setMessage(`${list.length} ${copy.targetsImported}`)
-  }
-
-  async function startScan() {
-    if (!active) return
-    await api(`/api/workspaces/${active.id}/scan/start`, {
-      method: 'POST',
-      body: JSON.stringify({ mode: 'standard' })
-    })
-    setMessage(copy.scanQueued)
-    setTimeout(refresh, 1500)
-  }
-
-  async function assessPlan() {
-    if (!active || selected.length === 0) return
-    const result = await api<{ plan_id: number }>(`/api/workspaces/${active.id}/execution-plans/assess`, {
-      method: 'POST',
-      body: JSON.stringify({ finding_ids: selected, scenario_text: scenario, allow_dynamic: true })
-    })
-    setMessage(`${copy.planCreated} #${result.plan_id}`)
-    setTimeout(refresh, 800)
-  }
-
-  async function approvePlan(planId: number) {
-    await api(`/api/execution-plans/${planId}/approve`, {
-      method: 'POST',
-      body: JSON.stringify({ approved_by: 'operator' })
-    })
-    setMessage(`${copy.planApproved} #${planId}`)
-    setTimeout(refresh, 800)
-  }
-
-  async function executePlan(planId: number) {
-    await api(`/api/execution-plans/${planId}/execute`, { method: 'POST' })
-    setMessage(`${copy.planSubmitted} #${planId}`)
-    setSelected([])
-    setTimeout(refresh, 1200)
-  }
-
-  async function registerSession() {
-    if (!active) return
-    await api(`/api/workspaces/${active.id}/sessions`, {
-      method: 'POST',
-      body: JSON.stringify({
-        session_type: 'pivot',
-        target: sessionTarget,
-        tool: sessionTool,
-        status: 'registered',
-        approval_ref: latestPlan ? `execution-plan-${latestPlan.id}` : '',
-        notes: 'Approved session metadata only. The platform does not auto-deploy webshells or covert channels.'
-      })
-    })
-    setMessage(copy.sessionRegistered)
-    setTimeout(refresh, 800)
-  }
-
-  async function generateReport() {
-    if (!active) return
-    const result = await api<{ report_path: string }>(`/api/workspaces/${active.id}/report/generate`, { method: 'POST' })
-    setMessage(`${copy.reportGenerated}: ${result.report_path}`)
+  function copyFlag(value: string) {
+    navigator.clipboard?.writeText(value)
+    setMessage('Flag 已复制')
   }
 
   return (
-    <div className="shell">
-      <aside>
+    <div className="app-shell">
+      <aside className="sidebar">
         <div className="brand">
-          <ShieldCheck size={28} />
+          <ShieldCheck size={26} />
           <div>
             <strong>HawkWing</strong>
-            <span>{copy.product}</span>
+            <span>AI 解题工作台</span>
           </div>
         </div>
-        <button className="primary" onClick={createWorkspace}><Play size={16} /> {copy.newWorkspace}</button>
-        <div className="side-title">{copy.workspaces}</div>
-        {workspaces.map((ws) => (
-          <button key={ws.id} className={`workspace ${active?.id === ws.id ? 'on' : ''}`} onClick={() => setActive(ws)}>
-            #{ws.id} {ws.name}
-          </button>
-        ))}
+        <button className="primary" onClick={() => { setNewProjectOpen(true) }} disabled={!aiReady?.ready}>
+          <FolderPlus size={16} /> 新建项目
+        </button>
+        <div className="side-caption">项目列表</div>
+        <div className="project-list">
+          {projects.map((item) => (
+            <div key={item.id} className={`project-item ${active?.id === item.id ? 'on' : ''}`}>
+              <button className="project-item-btn" onClick={() => setActive(item)}>
+                <span>#{item.id}</span>
+                <strong>{item.name}</strong>
+              </button>
+              <button className="project-delete-btn" onClick={(e) => { e.stopPropagation(); deleteProject(item); }} title="删除项目">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
       </aside>
 
-      <main>
-        <header>
+      <main className="workspace">
+        <header className="topbar">
           <div>
-            <h1>{active ? active.name : copy.emptyTitle}</h1>
-            <p>{copy.subtitle}</p>
+            <h1>{active ? active.name : '新项目'}</h1>
+            <p>AI 读题、自动扫描、智能评估 Runner、人工确认执行、提取 flag、生成报告。</p>
           </div>
-          <div className="header-pills">
-            <div className="lang-switch" aria-label={copy.language}>
-              <Globe2 size={16} />
-              <button className={lang === 'zh' ? 'on' : ''} onClick={() => setLang('zh')}>中文</button>
-              <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
+          <div className="top-actions">
+            <div className={`ai-state ${aiReady?.ready ? 'ready' : 'blocked'}`}>
+              <Bot size={16} />
+              <span>{aiReady?.ready ? `AI 已连通 · ${aiReady.provider}` : 'AI 未连通'}</span>
             </div>
-            <button className="ai-pill action-pill" onClick={openAiSettings}>
-              <Bot size={16} /> {aiConfig?.api_key_configured ? copy.aiConfigured : copy.aiMissing}
-              <Settings size={15} />
-            </button>
-            <div className="ai-pill"><Boxes size={16} /> {catalogInfo.tools} tools / {catalogInfo.runners} runners / {catalogInfo.skills} skills</div>
+            <button onClick={openAiSettings}><Settings size={16} /> AI 配置</button>
           </div>
         </header>
 
+        {!aiReady?.ready && (
+          <div className="blocking-banner">
+            <strong>AI 未通过连通性检查，项目流程已锁定。</strong>
+            <span>{aiReady?.error || '请配置 API Key、Base URL 和模型后重试。'}</span>
+          </div>
+        )}
+
+        <section className={`flag-strip ${flags.length ? 'found' : ''}`}>
+          <div>
+            <strong>{flags.length ? '已发现 Flag' : 'Flag 监控'}</strong>
+            <span>{flags.length ? '点击复制候选答案，提交前请人工复核。' : 'Runner 找到候选 flag 后会在这里高亮显示。'}</span>
+          </div>
+          <div className="flag-list">
+            {flags.length === 0 && <code>waiting-for-flag</code>}
+            {flags.map((item) => (
+              <button className="flag-code" key={`${item.job_id}-${item.flag}`} onClick={() => copyFlag(item.flag)}>
+                <code>{item.flag}</code>
+                <Copy size={14} />
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="progress-panel">
+          <div className="progress-line">
+            {stages.map((stage, index) => (
+              <div className={`progress-node ${stage.status}`} key={stage.key}>
+                <div className="dot">{stage.status === 'done' ? <CheckCircle2 size={15} /> : index + 1}</div>
+                <strong>{progressLabels[stage.key] || stage.label}</strong>
+                <span>{statusText[stage.status] || stage.status}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {message && <div className="notice">{message}</div>}
 
-        <section className="panel wide">
-          <h2><Workflow size={18} /> {copy.stage}</h2>
-          <div className="stage-row">
-            {stages.map((stage) => (
-              <div className={`stage ${stage.status}`} key={stage.key}>
-                <strong>{copy.stageLabels[stage.key as keyof typeof copy.stageLabels] || stage.label}</strong>
-                <span>{statusLabel(stage.status)}</span>
-                <small>{stage.count}</small>
-              </div>
-            ))}
+        <section className="work-grid">
+          <div className="panel project-panel">
+            <div className="panel-head">
+              <div className="panel-title"><Clipboard size={18} /> 项目信息</div>
+              <button className="primary compact" onClick={startTask} disabled={!active || !aiReady?.ready || busy === 'start'}>
+                {busy === 'start' ? <Loader2 className="spin" size={16} /> : <Play size={16} />} Start
+              </button>
+            </div>
+            <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="项目名称" />
+            <textarea value={projectDesc} onChange={(e) => setProjectDesc(e.target.value)} placeholder="题目描述、目标地址、flag 格式、附件说明" />
+            <label className="upload-box">
+              <Upload size={18} />
+              <span>
+                {uploadedCount > 0
+                  ? `${uploadedCount} 个附件已上传`
+                  : files?.length
+                    ? `${files.length} 个附件待上传`
+                    : '上传附件'}
+              </span>
+              <input type="file" multiple onChange={(e) => { setFiles(e.target.files); setUploadedCount(0); }} />
+            </label>
           </div>
-        </section>
 
-        <section className="grid">
-          <div className="panel">
-            <h2><Radar size={18} /> {copy.targets}</h2>
-            <textarea value={targets} onChange={(e) => setTargets(e.target.value)} />
-            <div className="actions">
-              <button onClick={importTargets} disabled={!active}>{copy.importTargets}</button>
-              <button onClick={startScan} disabled={!active}><Activity size={16} /> {copy.startScan}</button>
+          <div className="panel targets-panel">
+            <div className="panel-title"><Radar size={18} /> AI识别目标</div>
+            <div className="scroll-list compact-list">
+              {targets.map((item) => (
+                <div className="target-row" key={item.id}>
+                  <code>{item.value}</code>
+                  <span>{item.type}</span>
+                </div>
+              ))}
+              {targets.length === 0 && <p className="empty">AI 读题后会自动生成目标。</p>}
             </div>
           </div>
 
-          <div className="panel">
-            <h2><Activity size={18} /> {copy.findings}</h2>
-            <div className="table">
-              {findings.map((finding) => (
-                <label className="row" key={finding.id}>
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(finding.id)}
-                    onChange={(e) => setSelected(e.target.checked ? [...selected, finding.id] : selected.filter((id) => id !== finding.id))}
-                  />
-                  <span className="score">{finding.risk_score.toFixed(1)}</span>
-                  <span>
+          <div className="panel findings-panel">
+            <div className="panel-title"><Activity size={18} /> 漏洞发现</div>
+            <div className="scroll-list">
+              {findings.map((finding, index) => (
+                <div className="finding-row" key={finding.id}>
+                  <span className="number">{index + 1}</span>
+                  <span className="risk">{finding.risk_score.toFixed(1)}</span>
+                  <div>
                     <strong>{finding.title}</strong>
-                    <small>{finding.target} / {finding.severity} / {finding.source_tool}</small>
-                  </span>
-                </label>
-              ))}
-              {findings.length === 0 && <p className="empty">{copy.noFindings}</p>}
-            </div>
-          </div>
-        </section>
-
-        <section className="panel wide">
-          <h2><Workflow size={18} /> {copy.planAssessment}</h2>
-          <textarea value={scenario} onChange={(e) => setScenario(e.target.value)} />
-          <div className="actions">
-            <button onClick={assessPlan} disabled={!active || selectedCount === 0}>{copy.assessPlan} ({selectedCount} {copy.selected})</button>
-            {latestPlan && latestPlan.status === 'draft' && <button onClick={() => approvePlan(latestPlan.id)}>{copy.approvePlan} #{latestPlan.id}</button>}
-            {latestPlan && latestPlan.status === 'approved' && <button onClick={() => executePlan(latestPlan.id)}>{copy.executePlan} #{latestPlan.id}</button>}
-          </div>
-          {latestPlan && (
-            <div className="plan">
-              <strong>#{latestPlan.id}: {statusLabel(latestPlan.status)}</strong>
-              <small>{latestPlan.risk_summary}</small>
-              {latestPlan.plan.ai_initial_analysis && (
-                <div className="ai-analysis">
-                  <strong>{copy.aiInitialAnalysis}</strong>
-                  <p>{latestPlan.plan.ai_initial_analysis}</p>
-                </div>
-              )}
-              <div className="plan-grid">
-                {(latestPlan.plan.containers || []).map((item) => (
-                  <div className="plan-item" key={item.name}>
-                    <strong>{item.runner_profile}</strong>
-                    <span>{item.risk_level}</span>
-                    <small>{item.image}</small>
-                    <small>{item.tools.slice(0, 6).join(', ')}</small>
-                    {item.ai_recommendation && (
-                      <div className="runner-reason">
-                        <strong>{copy.aiRationale}</strong>
-                        <small>{item.ai_recommendation.rationale}</small>
-                        {item.ai_recommendation.next_checks?.length > 0 && (
-                          <small>{copy.nextChecks}: {item.ai_recommendation.next_checks.slice(0, 3).join(' / ')}</small>
-                        )}
-                      </div>
-                    )}
+                    <small>{finding.target} · {finding.severity} · {finding.source_tool}</small>
                   </div>
-                ))}
-                {(latestPlan.plan.dynamic_images || []).map((item) => (
-                  <div className="plan-item dynamic" key={item.name}>
-                    <strong>{item.name}</strong>
-                    <span>{item.policy_allowed ? copy.policyOk : copy.policyBlocked}</span>
-                    <small>{item.base_image}</small>
-                    <small>{(item.policy_reasons || []).join('; ') || copy.requiresApproval}</small>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section className="panel wide">
-          <h2><Boxes size={18} /> {copy.runnerJobs}</h2>
-          <div className="job-list">
-            {jobs.map((job) => (
-              <div className="job" key={job.id}>
-                <strong>#{job.id} Finding-{job.finding_id}</strong>
-                <span>{statusLabel(job.status)}</span>
-                <small>{job.runner_profile || job.runner_image}</small>
-                <small>{job.result_summary}</small>
-              </div>
-            ))}
-            {jobs.length === 0 && <p className="empty">{copy.noJobs}</p>}
-          </div>
-        </section>
-
-        <section className="grid">
-          <div className="panel">
-            <h2><Link size={18} /> {copy.sessions}</h2>
-            <div className="session-form">
-              <input value={sessionTarget} onChange={(e) => setSessionTarget(e.target.value)} placeholder={copy.sessionTarget} />
-              <input value={sessionTool} onChange={(e) => setSessionTool(e.target.value)} placeholder={copy.sessionTool} />
-              <button onClick={registerSession} disabled={!active}>{copy.registerSession}</button>
-            </div>
-            <div className="mini-list">
-              {sessions.map((item) => (
-                <div className="mini-item" key={item.id}>
-                  <strong>{item.session_type}: {item.target}</strong>
-                  <small>{item.tool} / {statusLabel(item.status)} / {item.approval_ref || copy.noApprovalRef}</small>
                 </div>
               ))}
-              {sessions.length === 0 && <p className="empty">{copy.noSessions}</p>}
+              {findings.length === 0 && <p className="empty">扫描完成后按风险排序展示漏洞。</p>}
             </div>
           </div>
 
-          <div className="panel">
-            <h2><FileText size={18} /> {copy.evidence}</h2>
-            <div className="mini-list">
-              {evidence.slice(0, 12).map((item) => (
-                <div className="mini-item" key={item.id}>
+          <div className="panel plan-panel">
+            <div className="panel-head">
+              <div className="panel-title"><Bot size={18} /> AI解题方案</div>
+              <button className="primary compact" onClick={approveAndExecute} disabled={!latestPlan || !aiReady?.ready || busy === 'execute'}>
+                <Play size={16} /> 确认执行
+              </button>
+            </div>
+            <div className="scroll-list">
+              {!latestPlan && <p className="empty">AI 评估漏洞后会在这里给出 Runner 和解题步骤。</p>}
+              {latestPlan?.plan.ai_initial_analysis && <div className="analysis-card">{latestPlan.plan.ai_initial_analysis}</div>}
+              {latestPlan?.plan.containers?.map((item) => (
+                <div className="runner-card" key={item.name}>
+                  <strong>{item.runner_profile}</strong>
+                  <span>{item.risk_level}</span>
+                  <small>{item.image}</small>
+                  <p>{item.ai_recommendation?.rationale || '等待 AI 推荐理由'}</p>
+                  {item.ai_recommendation?.next_checks?.slice(0, 4).map((step) => <small key={step}>- {step}</small>)}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="panel jobs-panel">
+            <div className="panel-title"><Play size={18} /> Runner 执行</div>
+            <div className="scroll-list">
+              {jobs.map((job) => (
+                <div className="job-row" key={job.id}>
+                  <strong>#{job.id} · {job.runner_profile}</strong>
+                  <span className={`job-status ${job.status}`}>{statusText[job.status] || job.status}</span>
+                  <small>{job.result_summary || job.target}</small>
+                </div>
+              ))}
+              {jobs.length === 0 && <p className="empty">人工确认后自动拉取/构建 Runner 并开始解题。</p>}
+            </div>
+          </div>
+
+          <div className="panel evidence-panel">
+            <div className="panel-title"><FileText size={18} /> 证据索引</div>
+            <div className="scroll-list">
+              {evidence.map((item) => (
+                <div className="evidence-row" key={item.id}>
                   <strong>{item.file_type} #{item.id}</strong>
                   <small>{item.path}</small>
-                  <small>{item.sha256.slice(0, 16)}...</small>
+                  <div className="row-actions">
+                    <code>{item.sha256.slice(0, 18)}</code>
+                    <a className="tiny-link" href={`${API}/api/workspaces/${active?.id}/evidence/${item.id}/download`} target="_blank" rel="noreferrer">下载</a>
+                  </div>
                 </div>
               ))}
-              {evidence.length === 0 && <p className="empty">{copy.noEvidence}</p>}
+              {evidence.length === 0 && <p className="empty">Runner 运行后证据会自动入库。</p>}
             </div>
           </div>
-        </section>
 
-        <section className="panel wide">
-          <h2><FileText size={18} /> {copy.report}</h2>
-          <p>{copy.reportDesc}</p>
-          <button onClick={generateReport} disabled={!active}>{copy.generateReport}</button>
+          <div className="panel report-panel">
+            <div className="panel-title"><Download size={18} /> 报告</div>
+            <p>报告会汇总题目、目标、漏洞、AI 方案、Runner 结果、候选 flag 和证据索引。</p>
+            <div className="writeup-links">
+              {writeups.map((item) => (
+                <a className="download-link" key={item.id} href={`${API}${item.download_url}`} target="_blank" rel="noreferrer">
+                  <Download size={16} /> Runner #{item.pentest_job_id} Writeup
+                </a>
+              ))}
+            </div>
+            <div className="actions">
+              <button onClick={generateReport} disabled={!active || !aiReady?.ready}><FileText size={16} /> 生成报告</button>
+              {reportUrl && <a className="download-link" href={`${API}${reportUrl}`} target="_blank" rel="noreferrer"><Download size={16} /> 下载报告</a>}
+            </div>
+          </div>
         </section>
       </main>
 
-      {aiOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+      {newProjectOpen && (
+        <div className="modal-backdrop">
           <div className="modal">
             <div className="modal-head">
-              <div>
-                <h2><Bot size={18} /> {copy.aiSettings}</h2>
-                <small>{aiConfig?.api_key_configured ? `${copy.apiKey}: ${aiConfig.api_key_masked}` : copy.aiMissing}</small>
-              </div>
-              <button className="icon-button" onClick={() => setAiOpen(false)} aria-label={copy.close}><X size={18} /></button>
+              <h2><FolderPlus size={18} /> 新建项目</h2>
+              <button className="icon-button" onClick={() => setNewProjectOpen(false)}><X size={18} /></button>
             </div>
             <label className="field">
-              <span>{copy.provider}</span>
-              <div className="provider-grid">
-                {Object.keys(providers).map((provider) => (
-                  <button key={provider} className={aiForm.provider === provider ? 'on' : ''} onClick={() => chooseProvider(provider)}>
-                    {providers[provider].label}
-                  </button>
-                ))}
-              </div>
+              <span>项目名称</span>
+              <input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="输入项目名称" />
             </label>
             <label className="field">
-              <span>{copy.apiKey}</span>
-              <input
-                type="password"
-                value={aiForm.api_key}
-                placeholder={aiConfig?.api_key_masked || copy.apiKeyHint}
-                onChange={(e) => setAiForm({ ...aiForm, api_key: e.target.value })}
-              />
-              <small>{copy.apiKeyHint}</small>
+              <span>项目描述</span>
+              <textarea value={newProjectDesc} onChange={(e) => setNewProjectDesc(e.target.value)} placeholder="题目要求、靶场地址、flag 格式、附件说明和比赛限制" />
+            </label>
+            <div className="modal-foot">
+              <small>创建后可上传附件并继续配置</small>
+              <button className="primary compact" onClick={createProject} disabled={busy === 'create'}>
+                {busy === 'create' ? <Loader2 className="spin" size={16} /> : <FolderPlus size={16} />} 创建项目
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aiOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="modal-head">
+              <h2><Bot size={18} /> AI 配置</h2>
+              <button className="icon-button" onClick={() => setAiOpen(false)}><X size={18} /></button>
+            </div>
+            <div className="provider-grid">
+              {Object.keys(aiConfig?.providers || {}).map((provider) => (
+                <button key={provider} className={aiForm.provider === provider ? 'on' : ''} onClick={() => chooseProvider(provider)}>
+                  {aiConfig?.providers?.[provider].label}
+                </button>
+              ))}
+            </div>
+            <label className="field">
+              <span>API Key</span>
+              <input type="password" value={aiForm.api_key} placeholder={aiConfig?.api_key_masked || '必填'} onChange={(e) => setAiForm({ ...aiForm, api_key: e.target.value })} />
             </label>
             <label className="field">
-              <span>{copy.baseUrl}</span>
+              <span>Base URL</span>
               <input
-                value={customProvider ? aiForm.api_base : selectedProvider?.api_base || aiForm.api_base}
-                disabled={!customProvider}
-                placeholder={selectedProvider?.api_base || 'https://api.example.com/v1'}
+                disabled={aiForm.provider !== 'custom'}
+                value={aiForm.provider === 'custom' ? aiForm.api_base : aiConfig?.providers?.[aiForm.provider]?.api_base || aiForm.api_base}
                 onChange={(e) => setAiForm({ ...aiForm, api_base: e.target.value })}
               />
-              <small>{copy.baseUrlHint}</small>
             </label>
             <label className="field">
-              <span>{copy.model}</span>
+              <span>Model</span>
               <input value={aiForm.model} onChange={(e) => setAiForm({ ...aiForm, model: e.target.value })} />
             </label>
             <div className="modal-foot">
-              <small>{copy.source}: {aiConfig?.source || '-'}</small>
-              <button className="primary compact" onClick={saveAiConfig}><Save size={16} /> {copy.save}</button>
+              <small>{aiReady?.ready ? '连通性正常' : aiReady?.error || '未检查'}</small>
+              <button className="primary compact" onClick={saveAiConfig}>保存并检查</button>
             </div>
           </div>
         </div>

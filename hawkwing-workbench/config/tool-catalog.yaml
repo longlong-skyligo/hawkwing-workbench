@@ -236,6 +236,14 @@ tools:
     runner_profile: runner-web-advanced
     description: "Non-malicious proof-of-access marker for authorized CTF/lab validation"
 
+  playwright-browser:
+    category: browser
+    version: "1.x"
+    status: enabled
+    risk_level: low
+    runner_profile: runner-web-basic
+    description: "Headless Chromium browser for JS rendering, screenshot capture, DOM extraction, and dynamic content analysis"
+
   linpeas:
     category: privesc
     version: "latest-pinned-by-runner"

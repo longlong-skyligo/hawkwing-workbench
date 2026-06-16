@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -34,6 +34,8 @@ PROVIDER_DEFAULTS = {
         "compatible": "openai",
     },
 }
+
+_READY_CACHE: dict[str, dict] = {}
 
 
 @dataclass
@@ -153,3 +155,32 @@ class AIClient:
             data = response.json()
             parts = data.get("content", [])
             return "\n".join(part.get("text", "") for part in parts if part.get("type") == "text")
+
+
+async def check_ai_ready(db: Session | None = None) -> dict:
+    config = resolve_ai_config(db)
+    cache_key = f"{config.provider}:{config.api_base}:{config.model}:{bool(config.api_key)}"
+    cached = _READY_CACHE.get(cache_key)
+    if cached and datetime.utcnow() - cached["checked_at"] < timedelta(seconds=60):
+        return cached["status"]
+    if not config.api_key:
+        return {"ready": False, "provider": config.provider, "model": config.model, "error": "AI API Key 未配置。"}
+    try:
+        result = await AIClient(db).chat(
+            "Return exactly this JSON: {\"ok\":true}",
+            system="You are a connectivity checker. Return compact JSON only.",
+        )
+        ok = "true" in result.lower() or "ok" in result.lower()
+        status = {"ready": ok, "provider": config.provider, "model": config.model, "message": result[:300]}
+        _READY_CACHE[cache_key] = {"checked_at": datetime.utcnow(), "status": status}
+        return status
+    except Exception as exc:
+        status = {"ready": False, "provider": config.provider, "model": config.model, "error": str(exc)}
+        _READY_CACHE[cache_key] = {"checked_at": datetime.utcnow(), "status": status}
+        return status
+
+
+async def require_ai_ready(db: Session) -> None:
+    status = await check_ai_ready(db)
+    if not status.get("ready"):
+        raise RuntimeError(status.get("error") or "AI 连通性检查失败。")
