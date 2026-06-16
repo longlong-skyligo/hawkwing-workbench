@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     artifact_root: str = "/data/artifacts"
     report_root: str = "/data/reports"
     workspace_root: str = "/data/workspaces"
+    host_data_root: str = ""
     runner_build_context: str = "/opt/hawkwing/runners"
 
     ai_provider: str = "openai"

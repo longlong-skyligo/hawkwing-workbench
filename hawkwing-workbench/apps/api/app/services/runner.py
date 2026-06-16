@@ -16,6 +16,14 @@ class RunnerManager:
         self.settings = get_settings()
         self.client = docker.from_env()
 
+    def _host_path(self, container_path: Path) -> str:
+        """Convert container path to host path for Docker volume mounts."""
+        raw = str(container_path)
+        host_root = self.settings.host_data_root
+        if host_root:
+            return raw.replace("/data/", host_root.rstrip("/") + "/", 1)
+        return raw
+
     def run_validation(self, job_id: int, workspace_id: int, target: str, finding_id: int, image: str, plan_context: dict | None = None) -> dict:
         artifact_dir = Path(self.settings.artifact_root) / f"workspace-{workspace_id}" / f"pentest-job-{job_id}"
         artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -34,7 +42,7 @@ class RunnerManager:
         container = self.client.containers.run(
             image=image,
             command=["/out/input.json", "/out"],
-            volumes={str(artifact_dir): {"bind": "/out", "mode": "rw"}},
+            volumes={self._host_path(artifact_dir): {"bind": "/out", "mode": "rw"}},
             detach=True,
             auto_remove=False,
             mem_limit="2g",

@@ -7,9 +7,9 @@ RUNNER_NAME="${RUNNER_NAME:-hawkwing-runner}"
 
 mkdir -p "${OUT_DIR}/evidence/http" "${OUT_DIR}/evidence/screenshots" "${OUT_DIR}/evidence/files" "${OUT_DIR}/evidence/forensics" "${OUT_DIR}/evidence/pcap"
 
-TARGET="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('target','unknown-target'))" "${INPUT_PATH}" 2>/dev/null || echo "unknown-target")"
-JOB_ID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('job_id','unknown-job'))" "${INPUT_PATH}" 2>/dev/null || echo "unknown-job")"
-FINDING_ID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('finding_id','unknown-finding'))" "${INPUT_PATH}" 2>/dev/null || echo "unknown-finding")"
+TARGET="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('target','unknown-target'))" "${INPUT_PATH}" 2>&1 || echo "unknown-target")"
+JOB_ID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('job_id','unknown-job'))" "${INPUT_PATH}" 2>&1 || echo "unknown-job")"
+FINDING_ID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('finding_id','unknown-finding'))" "${INPUT_PATH}" 2>&1 || echo "unknown-finding")"
 
 {
   echo "runner=${RUNNER_NAME}"

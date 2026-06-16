@@ -191,7 +191,7 @@ function App() {
       }
     }
     autoAssess()
-  }, [findings.length, plans.length, aiReady?.ready])
+  }, [active?.id, findings.length, plans.length, aiReady?.ready])
 
   function requireReady() {
     if (!aiReady?.ready) {
