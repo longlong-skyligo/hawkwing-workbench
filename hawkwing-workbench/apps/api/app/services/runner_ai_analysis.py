@@ -10,8 +10,10 @@ from app.services.ai_client import AIClient
 
 RUNNER_AI_ROLE = (
     "你是一个网络安全专家，正在做一道 CTF 题目。"
-    "可以参考主控 AI 的建议，但必须结合实际证据，以拿到 flag 为最终目标。"
-    "你可以调用容器内的 nmap、curl、ffuf、nuclei、katana、dirsearch、playwright 等工具。"
+    "你可以参考主控 AI 的建议，但以拿到 flag 为最终目标。"
+    "你是 flag 提取的主引擎——证据采集器只负责抓取原始数据，由你来分析并找到 flag。"
+    "仔细检查：HTML 源码、JavaScript 逻辑、Cookie、HTTP 头、Base64 编码串、注释中的隐藏信息。"
+    "常见 flag 可能藏在：JS 变量、Base64 解码后、HTML 注释、响应头、前端逻辑判断中。"
     "如果证据不足，明确指出缺少什么、下一步该怎么做，不要编造 flag。"
 )
 
@@ -97,7 +99,16 @@ async def analyze_runner_artifacts(
     # ── Round 1: Triage ──────────────────────────────────────────
     round1_prompt = json.dumps({
         "round": 1,
-        "task": "Triage. Review the main AI solution plan and runner evidence. Identify what the runner did, what it found, and whether a flag/answer was recovered.",
+        "task": "Triage. The evidence collector has finished grabbing raw data from the target. As the primary flag extraction engine, YOUR job is to find the flag.",
+        "instructions": [
+            "Read ALL provided HTML/JS/headers carefully.",
+            "Look for flag patterns (flag{...}, ctf{...}, CTF{...}, ctfshow{...}, FLAG{...}).",
+            "If you find Base64 strings, decode them and search the decoded text for flags.",
+            "Check JavaScript code for hardcoded passwords, comparisons, or hidden logic.",
+            "Check HTTP response headers for custom fields (X-Flag, etc).",
+            "Check HTML comments, hidden inputs, meta tags.",
+            "Even if the flag is only present in encoded/obfuscated form, try to reconstruct it.",
+        ],
         "main_ai_plan": {
             "objective": plan_context.get("target_objective", ""),
             "background": plan_context.get("vulnerability_background", ""),
@@ -110,19 +121,20 @@ async def analyze_runner_artifacts(
             "target": job.target,
             "runner_profile": job.runner_profile,
         },
-        "runner_evidence_summary": {
+        "raw_evidence": {
             "input_json": input_text[:3000],
             "result_json": result_text[:4000],
             "commands_log_tail": command_log[-3000:],
             "timeline_json": timeline_text[:2000],
-            "http_evidence_keys": list(http_evidence.keys()),
-            "container_log_tail": container_log[-2000:],
+            "http_evidence": {k: v[:6000] for k, v in http_evidence.items()},
+            "full_container_log": container_log[-8000:],
         },
         "required_output_format": {
             "flag_found": "true/false",
-            "flag_candidates": "list of candidate flag/answer values",
-            "runner_accomplished": "summary of what the runner achieved",
-            "gaps": "what is still missing or unclear",
+            "flag_candidates": "list of flag/answer strings found",
+            "extraction_method": "how you found each flag (e.g. 'Base64 decode of JS variable', 'plain text in HTML', 'HTTP header')",
+            "runner_accomplished": "summary of what the collector gathered",
+            "gaps": "what is still missing or unclear — be specific about what additional evidence would help",
         },
     }, ensure_ascii=False, indent=2)
 
