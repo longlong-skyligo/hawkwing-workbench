@@ -9,8 +9,9 @@ class Settings(BaseSettings):
     artifact_root: str = "/data/artifacts"
     report_root: str = "/data/reports"
     workspace_root: str = "/data/workspaces"
+    runner_build_context: str = "/opt/hawkwing/runners"
 
-    ai_provider: str = "openai-compatible"
+    ai_provider: str = "openai"
     ai_api_base: str = ""
     ai_api_key: str = ""
     ai_model: str = "gpt-4.1-mini"

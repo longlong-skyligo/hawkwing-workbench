@@ -1,10 +1,12 @@
 from datetime import datetime
+import asyncio
 
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AuditLog, Finding, PentestJob, ScanJob, Target
 from app.services.evidence import index_artifacts
 from app.services.runner import RunnerManager
+from app.services.runner_ai_analysis import analyze_runner_artifacts
 from app.services.state_bus import emit_state_event
 from app.workers.celery_app import celery_app
 
@@ -83,6 +85,25 @@ def run_pentest_job(pentest_job_id: int) -> None:
 
         job.status = "completed" if result["exit_code"] == 0 else "failed"
         job.container_id = result["container_id"]
+        try:
+            analysis_path = asyncio.run(analyze_runner_artifacts(db, job, result["artifact_dir"]))
+            emit_state_event(
+                db,
+                workspace_id=job.workspace_id,
+                event_type="runner.ai_analysis.created",
+                source="ai-runner-analyzer",
+                target_ref=job.target,
+                data={"pentest_job_id": job.id, "path": str(analysis_path)},
+            )
+        except Exception as analysis_exc:
+            emit_state_event(
+                db,
+                workspace_id=job.workspace_id,
+                event_type="runner.ai_analysis.failed",
+                source="ai-runner-analyzer",
+                target_ref=job.target,
+                data={"pentest_job_id": job.id, "error": str(analysis_exc)},
+            )
         evidence_count = index_artifacts(db, job.workspace_id, job.id, result["artifact_dir"])
         job.result_summary = (
             f"Runner finished with exit code {result['exit_code']}. "

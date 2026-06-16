@@ -71,6 +71,10 @@ aside {
   border-color: #2274a5;
 }
 
+.compact {
+  width: auto;
+}
+
 .side-title {
   color: #9ca8b6;
   font-size: 12px;
@@ -121,7 +125,7 @@ p {
   margin: 0;
 }
 
-.ai-pill, .notice {
+.ai-pill, .notice, .lang-switch {
   border: 1px solid #ccd6e0;
   background: #fff;
   border-radius: 6px;
@@ -140,6 +144,29 @@ p {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.action-pill {
+  min-height: 42px;
+}
+
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.lang-switch button {
+  border: 0;
+  padding: 5px 8px;
+  background: transparent;
+  color: #526170;
+}
+
+.lang-switch button.on {
+  color: #fff;
+  background: #2274a5;
 }
 
 .notice {
@@ -179,6 +206,11 @@ input {
   border: 1px solid #ccd6e0;
   border-radius: 6px;
   padding: 9px 10px;
+}
+
+input:disabled {
+  color: #526170;
+  background: #eef3f8;
 }
 
 .actions {
@@ -322,9 +354,93 @@ small {
   background: #8a4b0f;
 }
 
+.ai-analysis {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+}
+
+.ai-analysis p {
+  margin-top: 6px;
+}
+
+.runner-reason {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #e3eaf2;
+}
+
+.runner-reason strong {
+  font-size: 13px;
+}
+
 .empty {
   color: #7a8794;
   padding: 10px 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(17, 24, 39, 0.48);
+}
+
+.modal {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 44px);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.22);
+}
+
+.modal-head,
+.modal-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.modal-foot {
+  align-items: center;
+  margin-top: 18px;
+}
+
+.icon-button {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.field span {
+  font-weight: 700;
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.provider-grid button.on {
+  color: #fff;
+  background: #2274a5;
+  border-color: #2274a5;
 }
 
 @media (max-width: 900px) {
@@ -340,7 +456,11 @@ small {
     display: block;
   }
 
-  .ai-pill {
+  .ai-pill, .lang-switch {
     margin-top: 14px;
+  }
+
+  .provider-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

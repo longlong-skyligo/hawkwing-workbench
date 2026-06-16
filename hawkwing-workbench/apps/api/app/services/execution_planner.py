@@ -1,16 +1,26 @@
 import json
+import re
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.models import Finding
+from app.services.ai_client import AIClient
 from app.services.catalog import find_runner_profile, get_runner_profiles, get_skill_registry, get_tool_catalog
 from app.services.dynamic_builder import propose_dynamic_runner
 
 
 def _profile_for_finding(finding: Finding) -> str:
+    target = (finding.target or "").lower()
     text = f"{finding.title} {finding.raw_detail} {finding.source_tool}".lower()
-    if any(token in text for token in ["ad", "active directory", "ldap", "smb", "kerberos", "domain"]):
+    if target.startswith(("http://", "https://")):
+        if finding.severity.lower() in {"critical", "high"} and finding.confidence >= 0.75:
+            return "runner-web-advanced"
+        return "runner-web-basic"
+    if (
+        re.search(r"\b(ad|ldap|smb|kerberos|domain)\b", text)
+        or "active directory" in text
+    ):
         return "runner-ad-basic"
     if any(token in text for token in ["pcap", "traffic", "packet", "zeek", "suricata"]):
         return "runner-traffic-basic"
@@ -100,10 +110,136 @@ def build_execution_plan(
     return plan
 
 
+def _extract_json_object(text: str) -> dict[str, Any]:
+    if not text:
+        return {}
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            return json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+def _safe_profile(profile_name: str, fallback: str, profiles: dict[str, Any]) -> str:
+    if profile_name in profiles and profile_name != "runner-dynamic":
+        return profile_name
+    return fallback
+
+
+async def build_ai_guided_execution_plan(
+    db: Session,
+    workspace_id: int,
+    finding_ids: list[int],
+    scenario_text: str = "",
+    allow_dynamic: bool = True,
+) -> dict[str, Any]:
+    base_plan = build_execution_plan(db, workspace_id, finding_ids, scenario_text, allow_dynamic)
+    findings = (
+        db.query(Finding)
+        .filter(Finding.workspace_id == workspace_id, Finding.id.in_(finding_ids))
+        .order_by(Finding.risk_score.desc())
+        .all()
+    )
+    profiles = get_runner_profiles().get("runner_profiles", {})
+    profile_summary = {
+        name: {
+            "purpose": value.get("purpose", ""),
+            "risk_level": value.get("risk_level", "medium"),
+            "require_approval": bool(value.get("require_approval", False)),
+            "tools": value.get("tools", [])[:12],
+        }
+        for name, value in profiles.items()
+        if name != "runner-dynamic"
+    }
+    prompt = {
+        "task": "Before any container execution, analyze the CTF/range target and choose suitable stock runner containers.",
+        "rules": [
+            "Use only listed stock runner_profile values.",
+            "Prefer web runners for http/https targets unless there is strong evidence for another category.",
+            "Do not recommend malware, persistence, phishing, destructive actions, or covert access deployment.",
+            "If the evidence is weak, choose a low-noise reconnaissance or web-basic runner.",
+            "Return JSON only.",
+        ],
+        "scenario_text": scenario_text,
+        "findings": [
+            {
+                "id": finding.id,
+                "target": finding.target,
+                "title": finding.title,
+                "severity": finding.severity,
+                "confidence": finding.confidence,
+                "risk_score": finding.risk_score,
+                "source_tool": finding.source_tool,
+                "raw_detail": finding.raw_detail[:1200],
+                "deterministic_fallback_runner": _profile_for_finding(finding),
+            }
+            for finding in findings
+        ],
+        "available_runner_profiles": profile_summary,
+        "required_schema": {
+            "overall_analysis": "short Chinese analysis of the likely challenge category and first move",
+            "recommendations": [
+                {
+                    "finding_id": "integer",
+                    "runner_profile": "one available runner_profile",
+                    "rationale": "why this runner fits",
+                    "focus_tools": ["tool names from the runner"],
+                    "next_checks": ["safe validation checks"],
+                    "confidence": "0.0-1.0",
+                }
+            ],
+        },
+    }
+
+    ai_text = await AIClient(db).chat(
+        json.dumps(prompt, ensure_ascii=False, indent=2),
+        system="你是授权 CTF/靶场的执行前分析调度助手。你只输出 JSON，并且只能从平台提供的存量 Runner 中选择。",
+    )
+    ai_data = _extract_json_object(ai_text)
+    recommendations = {int(item.get("finding_id", 0)): item for item in ai_data.get("recommendations", []) if item.get("finding_id")}
+
+    for item in base_plan.get("containers", []):
+        finding_id = int(item.get("finding_id", 0))
+        recommendation = recommendations.get(finding_id, {})
+        fallback = item["runner_profile"]
+        profile_name = _safe_profile(str(recommendation.get("runner_profile", "")), fallback, profiles)
+        profile = find_runner_profile(profile_name)
+        item["runner_profile"] = profile_name
+        item["image"] = profile.get("image", item["image"])
+        item["purpose"] = profile.get("purpose", item["purpose"])
+        item["tools"] = profile.get("tools", item.get("tools", []))[:8]
+        item["risk_level"] = profile.get("risk_level", item["risk_level"])
+        item["requires_approval"] = bool(profile.get("require_approval", item["requires_approval"]))
+        item["ai_recommendation"] = {
+            "rationale": recommendation.get("rationale", "AI recommendation unavailable; deterministic fallback was used."),
+            "focus_tools": recommendation.get("focus_tools", item["tools"][:5]),
+            "next_checks": recommendation.get("next_checks", []),
+            "confidence": recommendation.get("confidence", 0),
+            "fallback_runner": fallback,
+        }
+
+    base_plan["ai_initial_analysis"] = ai_data.get(
+        "overall_analysis",
+        "AI 未返回可解析的结构化分析，平台已使用安全的确定性 Runner 选择逻辑。",
+    )
+    base_plan["ai_planning_mode"] = "ai_guided_with_deterministic_fallback"
+    base_plan["reasoning_summary"] = (
+        "AI analyzed selected findings and recommended stock runner profiles before execution. "
+        "The platform applied runner allow-list validation and deterministic fallback where needed."
+    )
+    return base_plan
+
+
 def dumps_plan(plan: dict[str, Any]) -> str:
     return json.dumps(plan, ensure_ascii=False, indent=2)
 
 
 def loads_plan(plan_json: str) -> dict[str, Any]:
     return json.loads(plan_json or "{}")
-

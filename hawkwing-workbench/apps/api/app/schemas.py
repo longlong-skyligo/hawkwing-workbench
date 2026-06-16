@@ -36,6 +36,13 @@ class AIAnalyzeRequest(BaseModel):
     prompt: str
 
 
+class AIConfigUpdate(BaseModel):
+    provider: str = "openai"
+    api_base: str = ""
+    api_key: str = ""
+    model: str = ""
+
+
 class ExecutionPlanAssessRequest(BaseModel):
     finding_ids: list[int] = Field(default_factory=list)
     scenario_text: str = ""

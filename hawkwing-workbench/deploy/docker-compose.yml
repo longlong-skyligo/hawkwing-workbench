@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: hawkwing
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hawkwing -d hawkwing"]
       interval: 10s
@@ -118,6 +118,7 @@ services:
       ARTIFACT_ROOT: ${ARTIFACT_ROOT}
       REPORT_ROOT: ${REPORT_ROOT}
       WORKSPACE_ROOT: ${WORKSPACE_ROOT}
+      RUNNER_BUILD_CONTEXT: ${RUNNER_BUILD_CONTEXT}
       AI_PROVIDER: ${AI_PROVIDER}
       AI_API_BASE: ${AI_API_BASE}
       AI_API_KEY: ${AI_API_KEY}
@@ -129,6 +130,7 @@ services:
     volumes:
       - ../data:/data
       - ../config:/app/config:ro
+      - ../runners:/opt/hawkwing/runners:ro
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8000:8000"
@@ -149,10 +151,12 @@ services:
       REDIS_URL: ${REDIS_URL}
       ARTIFACT_ROOT: ${ARTIFACT_ROOT}
       REPORT_ROOT: ${REPORT_ROOT}
+      RUNNER_BUILD_CONTEXT: ${RUNNER_BUILD_CONTEXT}
       RUNNER_RECON_IMAGE: ${RUNNER_RECON_IMAGE}
       RUNNER_WEB_IMAGE: ${RUNNER_WEB_IMAGE}
     volumes:
       - ../data:/data
+      - ../runners:/opt/hawkwing/runners:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - api
@@ -168,9 +172,11 @@ services:
       REDIS_URL: ${REDIS_URL}
       ARTIFACT_ROOT: ${ARTIFACT_ROOT}
       REPORT_ROOT: ${REPORT_ROOT}
+      RUNNER_BUILD_CONTEXT: ${RUNNER_BUILD_CONTEXT}
       RUNNER_WEB_IMAGE: ${RUNNER_WEB_IMAGE}
     volumes:
       - ../data:/data
+      - ../runners:/opt/hawkwing/runners:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - api

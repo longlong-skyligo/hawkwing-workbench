@@ -58,7 +58,7 @@ API 文档：http://localhost:8000/docs
 编辑 `deploy/.env`：
 
 ```env
-AI_PROVIDER=openai-compatible
+AI_PROVIDER=openai
 AI_API_BASE=https://api.example.com/v1
 AI_API_KEY=replace-with-your-key
 AI_MODEL=gpt-4.1-mini

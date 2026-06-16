@@ -138,6 +138,17 @@ class WorkspaceStateEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class AISettings(Base):
+    __tablename__ = "ai_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    provider: Mapped[str] = mapped_column(String(50), default="openai")
+    api_base: Mapped[str] = mapped_column(String(500), default="")
+    api_key: Mapped[str] = mapped_column(Text, default="")
+    model: Mapped[str] = mapped_column(String(200), default="gpt-4.1-mini")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AttackPathNode(Base):
     __tablename__ = "attack_path_nodes"
 

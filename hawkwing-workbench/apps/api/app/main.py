@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.schemas import (
     AIAnalyzeRequest,
+    AIConfigUpdate,
     ExecutionPlanApproveRequest,
     ExecutionPlanAssessRequest,
     PentestBatchStart,
@@ -34,8 +35,8 @@ from app.schemas import (
     WorkspaceOut,
 )
 from app.services.catalog import get_dynamic_runner_policy, get_runner_profiles, get_skill_registry, get_tool_catalog
-from app.services.execution_planner import build_execution_plan, dumps_plan, loads_plan
-from app.services.ai_client import AIClient
+from app.services.execution_planner import build_ai_guided_execution_plan, dumps_plan, loads_plan
+from app.services.ai_client import AIClient, public_ai_config, resolve_ai_config, upsert_ai_config
 from app.services.reporting import generate_workspace_report
 from app.services.state_bus import emit_state_event
 from app.workers.tasks import run_pentest_job, run_scan_job
@@ -63,13 +64,22 @@ def health() -> dict:
 
 
 @app.get("/api/ai/config")
-def ai_config() -> dict:
-    return {
-        "provider": settings.ai_provider,
-        "api_base_configured": bool(settings.ai_api_base),
-        "api_key_configured": bool(settings.ai_api_key),
-        "model": settings.ai_model,
-    }
+def ai_config(db: Session = Depends(get_db)) -> dict:
+    return public_ai_config(resolve_ai_config(db))
+
+
+@app.put("/api/ai/config")
+def update_ai_config(payload: AIConfigUpdate, db: Session = Depends(get_db)) -> dict:
+    config = upsert_ai_config(
+        db,
+        provider=payload.provider,
+        api_base=payload.api_base,
+        api_key=payload.api_key,
+        model=payload.model,
+    )
+    db.add(AuditLog(actor="operator", action="ai.config.updated", detail=f"provider={config.provider}, model={config.model}"))
+    db.commit()
+    return public_ai_config(config)
 
 
 @app.get("/api/tools/catalog")
@@ -134,8 +144,8 @@ def stage_summary(workspace_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/ai/analyze")
-async def ai_analyze(payload: AIAnalyzeRequest) -> dict:
-    result = await AIClient().chat(payload.prompt)
+async def ai_analyze(payload: AIAnalyzeRequest, db: Session = Depends(get_db)) -> dict:
+    result = await AIClient(db).chat(payload.prompt)
     return {"workspace_id": payload.workspace_id, "result": result}
 
 
@@ -227,10 +237,10 @@ def start_batch_pentest(workspace_id: int, payload: PentestBatchStart, db: Sessi
 
 
 @app.post("/api/workspaces/{workspace_id}/execution-plans/assess")
-def assess_execution_plan(workspace_id: int, payload: ExecutionPlanAssessRequest, db: Session = Depends(get_db)):
+async def assess_execution_plan(workspace_id: int, payload: ExecutionPlanAssessRequest, db: Session = Depends(get_db)):
     if not db.get(Workspace, workspace_id):
         raise HTTPException(status_code=404, detail="workspace not found")
-    plan_data = build_execution_plan(
+    plan_data = await build_ai_guided_execution_plan(
         db=db,
         workspace_id=workspace_id,
         finding_ids=payload.finding_ids,
