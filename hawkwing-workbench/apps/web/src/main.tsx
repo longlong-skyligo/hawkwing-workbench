@@ -59,6 +59,13 @@ type ExecutionPlan = {
   }
 }
 
+const fallbackProviders: ProviderDefaults = {
+  openai: { label: 'OpenAI', api_base: 'https://api.openai.com/v1', model: 'gpt-4.1-mini', compatible: 'openai' },
+  claude: { label: 'Claude', api_base: 'https://api.anthropic.com/v1', model: 'claude-3-5-sonnet-latest', compatible: 'anthropic' },
+  deepseek: { label: 'DeepSeek', api_base: 'https://api.deepseek.com/v1', model: 'deepseek-chat', compatible: 'openai' },
+  custom: { label: 'Custom', api_base: '', model: 'gpt-4.1-mini', compatible: 'openai' }
+}
+
 const progressLabels: Record<string, string> = {
   targets: '目标',
   intake: 'AI读题',
@@ -129,6 +136,34 @@ function App() {
   const autoAssessRef = useRef<number | null>(null)
   const latestPlan = plans[0]
   const allFindingIds = useMemo(() => findings.map((item) => item.id), [findings])
+  const providerOptions = aiConfig?.providers || fallbackProviders
+  const actualDoneCount = useMemo(() => {
+    let count = 0
+    for (const stage of stages) {
+      if (stage.status !== 'done') break
+      count += 1
+    }
+    return count
+  }, [stages])
+  const [visualDoneCount, setVisualDoneCount] = useState(0)
+
+  useEffect(() => {
+    if (actualDoneCount < visualDoneCount) {
+      setVisualDoneCount(actualDoneCount)
+      return
+    }
+    if (actualDoneCount === visualDoneCount) return
+    const timer = window.setTimeout(() => {
+      setVisualDoneCount((current) => Math.min(current + 1, actualDoneCount))
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [actualDoneCount, visualDoneCount])
+
+  function visualStageStatus(index: number) {
+    if (index < visualDoneCount) return 'done'
+    if (index === visualDoneCount && index < stages.length) return 'active'
+    return 'pending'
+  }
 
   async function refresh(current = active) {
     const [ws, ready, config] = await Promise.all([
@@ -307,24 +342,46 @@ function App() {
   }
 
   async function saveAiConfig() {
-    const saved = await api<AIConfig>('/api/ai/config', { method: 'PUT', body: JSON.stringify(aiForm) })
-    setAiConfig(saved)
-    setAiOpen(false)
-    await refresh()
+    setBusy('ai-save')
+    try {
+      const saved = await api<AIConfig>('/api/ai/config', { method: 'PUT', body: JSON.stringify(aiForm) })
+      setAiConfig(saved)
+      const ready = await api<AIReady>('/api/ai/ready')
+      setAiReady(ready)
+      setMessage(ready.ready ? 'AI 配置已保存，连通性正常' : `AI 配置已保存，但连通性检查失败：${ready.error || '未知错误'}`)
+      setAiOpen(false)
+    } catch (err) {
+      setMessage(String(err))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function checkAiConnection() {
+    setBusy('ai-check')
+    try {
+      const ready = await api<AIReady>('/api/ai/ready')
+      setAiReady(ready)
+      setMessage(ready.ready ? 'AI 连通性正常' : `AI 连通性检查失败：${ready.error || '未知错误'}`)
+    } catch (err) {
+      setMessage(String(err))
+    } finally {
+      setBusy('')
+    }
   }
 
   function openAiSettings() {
     setAiForm({
       provider: aiConfig?.provider || 'openai',
-      api_base: aiConfig?.api_base || aiConfig?.providers?.openai?.api_base || '',
+      api_base: aiConfig?.api_base || providerOptions.openai?.api_base || '',
       api_key: '',
-      model: aiConfig?.model || aiConfig?.providers?.openai?.model || 'gpt-4.1-mini'
+      model: aiConfig?.model || providerOptions.openai?.model || 'gpt-4.1-mini'
     })
     setAiOpen(true)
   }
 
   function chooseProvider(provider: string) {
-    const defaults = aiConfig?.providers?.[provider]
+    const defaults = providerOptions[provider]
     setAiForm({
       ...aiForm,
       provider,
@@ -342,8 +399,13 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <ShieldCheck size={26} />
-          <div>
+          <div className="brand-radar" aria-hidden="true">
+            <span className="radar-sweep" />
+            <span className="radar-blip blip-one" />
+            <span className="radar-blip blip-two" />
+            <ShieldCheck size={26} />
+          </div>
+          <div className="brand-copy">
             <strong>HawkWing</strong>
             <span>AI 解题工作台</span>
           </div>
@@ -408,10 +470,10 @@ function App() {
         <section className="progress-panel">
           <div className="progress-line">
             {stages.map((stage, index) => (
-              <div className={`progress-node ${stage.status}`} key={stage.key}>
-                <div className="dot">{stage.status === 'done' ? <CheckCircle2 size={15} /> : index + 1}</div>
+              <div className={`progress-node ${visualStageStatus(index)}`} key={stage.key}>
+                <div className="dot">{visualStageStatus(index) === 'done' ? <CheckCircle2 size={15} /> : index + 1}</div>
                 <strong>{progressLabels[stage.key] || stage.label}</strong>
-                <span>{statusText[stage.status] || stage.status}</span>
+                <span>{statusText[visualStageStatus(index)] || visualStageStatus(index)}</span>
               </div>
             ))}
           </div>
@@ -575,10 +637,20 @@ function App() {
               <h2><Bot size={18} /> AI 配置</h2>
               <button className="icon-button" onClick={() => setAiOpen(false)}><X size={18} /></button>
             </div>
+            <div className={`config-summary ${aiReady?.ready ? 'ready' : 'blocked'}`}>
+              <div>
+                <strong>{aiReady?.ready ? '连通性正常' : '连通性异常'}</strong>
+                <span>{aiReady?.ready ? `${aiReady.provider} · ${aiReady.model}` : aiReady?.error || '尚未完成检查'}</span>
+              </div>
+              <div>
+                <strong>{aiConfig?.api_key_configured ? 'Key 已保存' : 'Key 未配置'}</strong>
+                <span>{aiConfig?.api_key_masked || '保存后会以掩码显示'} · {aiConfig?.source || 'local'}</span>
+              </div>
+            </div>
             <div className="provider-grid">
-              {Object.keys(aiConfig?.providers || {}).map((provider) => (
+              {Object.keys(providerOptions).map((provider) => (
                 <button key={provider} className={aiForm.provider === provider ? 'on' : ''} onClick={() => chooseProvider(provider)}>
-                  {aiConfig?.providers?.[provider].label}
+                  {providerOptions[provider].label}
                 </button>
               ))}
             </div>
@@ -590,7 +662,7 @@ function App() {
               <span>Base URL</span>
               <input
                 disabled={aiForm.provider !== 'custom'}
-                value={aiForm.provider === 'custom' ? aiForm.api_base : aiConfig?.providers?.[aiForm.provider]?.api_base || aiForm.api_base}
+                value={aiForm.provider === 'custom' ? aiForm.api_base : providerOptions[aiForm.provider]?.api_base || aiForm.api_base}
                 onChange={(e) => setAiForm({ ...aiForm, api_base: e.target.value })}
               />
             </label>
@@ -600,7 +672,14 @@ function App() {
             </label>
             <div className="modal-foot">
               <small>{aiReady?.ready ? '连通性正常' : aiReady?.error || '未检查'}</small>
-              <button className="primary compact" onClick={saveAiConfig}>保存并检查</button>
+              <div className="modal-actions">
+                <button className="compact" onClick={checkAiConnection} disabled={busy === 'ai-check'}>
+                  {busy === 'ai-check' ? <Loader2 className="spin" size={16} /> : <Bot size={16} />} 测试连接
+                </button>
+                <button className="primary compact" onClick={saveAiConfig} disabled={busy === 'ai-save'}>
+                  {busy === 'ai-save' ? <Loader2 className="spin" size={16} /> : <Settings size={16} />} 保存并检查
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -4,10 +4,11 @@ __pycache__/
 .pytest_cache/
 node_modules/
 dist/
+.npm-cache/
+*.log
 data/artifacts/*
 data/reports/*
 data/workspaces/*
 !data/artifacts/.gitkeep
 !data/reports/.gitkeep
 !data/workspaces/.gitkeep
-
