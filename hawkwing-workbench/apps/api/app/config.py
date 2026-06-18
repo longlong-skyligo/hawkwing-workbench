@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "HawkWing External Range AI Workbench"
+    app_name: str = "鹰翼AI攻防工作台"
     database_url: str = "postgresql+psycopg://hawkwing:hawkwing@postgres:5432/hawkwing"
     redis_url: str = "redis://redis:6379/0"
     artifact_root: str = "/data/artifacts"

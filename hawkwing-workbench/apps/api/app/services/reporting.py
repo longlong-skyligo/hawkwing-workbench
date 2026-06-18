@@ -1,32 +1,127 @@
 import json
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from jinja2 import Template
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import EvidenceFile, ExecutionPlan, Finding, PentestJob, Target, Workspace, WorkspaceStateEvent
-from app.services.catalog import get_runner_profiles, get_skill_registry, get_tool_catalog
-from app.services.execution_planner import loads_plan
+from app.models import PentestJob, Workspace
 
 
-def _flag_candidates(settings, workspace_id: int, jobs: list[PentestJob]) -> list[dict]:
-    flags: list[dict] = []
-    seen: set[str] = set()
+def _candidate_value(item: Any) -> str:
+    if isinstance(item, dict):
+        return str(item.get("candidate") or item.get("flag") or item.get("value") or "").strip()
+    return str(item or "").strip()
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+
+
+def _latest_writeup_for_job(settings, workspace_id: int, job_id: int) -> Path | None:
+    artifact_dir = Path(settings.artifact_root) / f"workspace-{workspace_id}" / f"pentest-job-{job_id}"
+    candidates = list(artifact_dir.glob("writeup_*.md")) + list(artifact_dir.glob("runner-writeup.md"))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime)
+
+
+def _collect_runner_writeups(settings, workspace_id: int, jobs: list[PentestJob]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
     for job in jobs:
+        writeup_path = _latest_writeup_for_job(settings, workspace_id, job.id)
         result_path = Path(settings.artifact_root) / f"workspace-{workspace_id}" / f"pentest-job-{job.id}" / "result.json"
-        if not result_path.exists():
-            continue
-        try:
-            data = json.loads(result_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        for item in data.get("flag_candidates") or []:
-            value = str(item.get("candidate", "")).strip()
-            if value and value not in seen:
-                seen.add(value)
-                flags.append({"flag": value, "source": item.get("source", "result.json"), "job_id": job.id, "target": job.target})
-    return flags
+        result = _read_json(result_path)
+        flags = []
+        for item in result.get("flag_candidates") or []:
+            value = _candidate_value(item)
+            if value and value not in flags:
+                flags.append(value)
+        if writeup_path:
+            content = writeup_path.read_text(encoding="utf-8", errors="replace")
+        else:
+            content = job.result_summary or "Runner 尚未生成 writeup。"
+        items.append({
+            "job": job,
+            "path": writeup_path,
+            "content": content.strip(),
+            "flags": flags,
+        })
+    return items
+
+
+def _build_report(workspace: Workspace, writeups: list[dict[str, Any]]) -> str:
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    solved_flags: list[str] = []
+    for item in writeups:
+        for flag in item["flags"]:
+            if flag not in solved_flags:
+                solved_flags.append(flag)
+
+    if len(writeups) == 1:
+        item = writeups[0]
+        job = item["job"]
+        flag_block = "\n".join(f"- `{flag}`" for flag in item["flags"]) or "- 未提取到明确 flag。"
+        return f"""# {workspace.name} 渗透报告
+
+生成时间：{generated_at}
+
+## 报告结论
+
+本报告基于单个 Runner 容器的 writeup 生成。Runner #01 使用 `{job.runner_profile}` 对目标 `{job.target}` 完成验证，并记录了拿到 flag 的复现流程。
+
+## 最终结果
+
+{flag_block}
+
+## Runner Writeup
+
+{item["content"]}
+"""
+
+    summary_lines = []
+    for index, item in enumerate(writeups, start=1):
+        job = item["job"]
+        flags = ", ".join(f"`{flag}`" for flag in item["flags"]) or "未提取到明确 flag"
+        summary_lines.append(f"{index}. Runner #{index:02d} `{job.runner_profile}` -> {flags}")
+
+    merged_sections = []
+    for index, item in enumerate(writeups, start=1):
+        job = item["job"]
+        merged_sections.append(f"""## Runner #{index:02d}
+
+- 目标：`{job.target}`
+- Runner：`{job.runner_profile}`
+- 状态：`{job.status}`
+
+{item["content"]}
+""")
+
+    final_flags = "\n".join(f"- `{flag}`" for flag in solved_flags) or "- 未提取到明确 flag。"
+    return f"""# {workspace.name} 渗透报告
+
+生成时间：{generated_at}
+
+## 报告结论
+
+本报告基于当前项目中 {len(writeups)} 个 Runner 容器的 writeup 综合生成，重点汇总各容器实际完成的解题过程和最终结果。
+
+## 最终结果
+
+{final_flags}
+
+## Runner 汇总
+
+{chr(10).join(summary_lines)}
+
+{chr(10).join(merged_sections)}
+"""
 
 
 def generate_workspace_report(db: Session, workspace_id: int) -> Path:
@@ -35,44 +130,30 @@ def generate_workspace_report(db: Session, workspace_id: int) -> Path:
     if not workspace:
         raise ValueError("workspace not found")
 
-    targets = db.query(Target).filter(Target.workspace_id == workspace_id).all()
-    findings = db.query(Finding).filter(Finding.workspace_id == workspace_id).order_by(Finding.risk_score.desc()).all()
-    pentest_jobs = db.query(PentestJob).filter(PentestJob.workspace_id == workspace_id).order_by(PentestJob.id.asc()).all()
-    execution_plans = db.query(ExecutionPlan).filter(ExecutionPlan.workspace_id == workspace_id).order_by(ExecutionPlan.id.desc()).all()
-    state_events = db.query(WorkspaceStateEvent).filter(WorkspaceStateEvent.workspace_id == workspace_id).order_by(WorkspaceStateEvent.id.desc()).limit(50).all()
-    evidence_files = db.query(EvidenceFile).filter(EvidenceFile.workspace_id == workspace_id).order_by(EvidenceFile.id.desc()).limit(200).all()
-    tool_catalog = get_tool_catalog().get("tools", {})
-    runner_profiles = get_runner_profiles().get("runner_profiles", {})
-    skills = get_skill_registry().get("skills", {})
-
-    template_path = Path("/app/config/report-template.md")
-    if not template_path.exists():
-        template_path = Path("config/report-template.md")
-    template = Template(template_path.read_text(encoding="utf-8"))
-
-    report = template.render(
-        workspace_name=workspace.name,
-        description=workspace.description,
-        status=workspace.status,
-        target_count=len(targets),
-        finding_count=len(findings),
-        pentest_job_count=len(pentest_jobs),
-        targets=targets,
-        findings=findings,
-        pentest_jobs=pentest_jobs,
-        execution_plans=execution_plans,
-        execution_plan_payloads=[loads_plan(plan.plan_json) for plan in execution_plans],
-        state_events=state_events,
-        evidence_files=evidence_files,
-        flags=_flag_candidates(settings, workspace_id, pentest_jobs),
-        tool_count=len(tool_catalog),
-        runner_profile_count=len(runner_profiles),
-        skill_count=len(skills),
-        ai_summary="建议优先复核高风险、高置信度、面向外部暴露的入口，并结合 Runner 证据、AI 分析和候选 flag 进行复盘。",
+    jobs = (
+        db.query(PentestJob)
+        .filter(PentestJob.workspace_id == workspace_id)
+        .order_by(PentestJob.id.asc())
+        .all()
     )
+    writeups = _collect_runner_writeups(settings, workspace_id, jobs)
 
-    out_dir = Path(settings.report_root)
+    out_dir = Path(settings.report_root) / f"workspace-{workspace_id}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f"workspace-{workspace_id}-report.md"
-    out_file.write_text(report, encoding="utf-8")
+    out_file = out_dir / f"渗透报告_{datetime.now().strftime('%Y%m%d%H%M')}.md"
+    out_file.write_text(_build_report(workspace, writeups), encoding="utf-8")
     return out_file
+
+
+def latest_workspace_report(workspace_id: int) -> Path | None:
+    settings = get_settings()
+    report_dir = Path(settings.report_root) / f"workspace-{workspace_id}"
+    if not report_dir.exists():
+        return None
+    legacy_report = Path(settings.report_root) / f"workspace-{workspace_id}-report.md"
+    candidates = list(report_dir.glob("渗透报告_*.md"))
+    if legacy_report.exists():
+        candidates.append(legacy_report)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime)

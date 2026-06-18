@@ -34,7 +34,30 @@ class RunnerManager:
             "job_id": job_id,
             "target": target,
             "finding_id": finding_id,
-            "mode": "controlled_validation",
+            "mode": "authorized_ctf_solve",
+            "authorization": {
+                "scope": "current_project_authorized_target_only",
+                "objective": "recover_the_challenge_flag",
+                "allowed_targets": [target],
+                "tool_access": "runner_may_call_all_tools_available_inside_its_container",
+                "permitted_ctf_actions": [
+                    "web_reconnaissance",
+                    "content_discovery_and_fuzzing",
+                    "payload_construction",
+                    "injection_testing",
+                    "deserialization_testing",
+                    "authentication_bypass_testing",
+                    "local_file_read_or_source_disclosure_when_required_by_the_challenge",
+                    "controlled_remote_code_execution_proof_when_required_by_the_challenge",
+                    "flag_extraction_and_evidence_capture",
+                ],
+                "boundaries": [
+                    "stay_within_allowed_targets",
+                    "do_not_pivot_to_unlisted_third_party_hosts",
+                    "do_not_persist_access_or_damage_services",
+                    "record_exact_requests_commands_outputs_and_flags",
+                ],
+            },
             "plan_context": plan_context or {},
         }
         (artifact_dir / "input.json").write_text(json.dumps(input_payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -48,6 +71,12 @@ class RunnerManager:
             mem_limit="2g",
             nano_cpus=2_000_000_000,
             network_mode="bridge",
+            environment={
+                "HAWKWING_AUTHORIZED_TARGET": target,
+                "HAWKWING_CTF_MODE": "authorized_target_only",
+                "HAWKWING_OBJECTIVE": "recover_flag",
+                "HAWKWING_TOOL_ACCESS": "all_container_tools",
+            },
             labels={
                 "hawkwing-workspace": str(workspace_id),
                 "hawkwing-job": str(job_id),

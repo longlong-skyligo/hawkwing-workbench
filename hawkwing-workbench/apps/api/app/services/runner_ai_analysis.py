@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,14 @@ RUNNER_AI_ROLE = (
     "如果证据不足，明确指出缺少什么、下一步该怎么做，不要编造 flag。"
 )
 
+RUNNER_AI_ROLE = (
+    "你是一个网络安全和 CTF 解题专家，正在分析 runner 容器采集到的真实证据。"
+    "你可以参考主控 AI 的建议，但最终目标是基于证据拿到 flag。"
+    "优先检查 proof-summary.json、proof_*.body.txt、HTTP 响应正文、HTML 源码、JavaScript、Cookie、HTTP 头和日志。"
+    "只有当精确 flag 字符串出现在真实证据中时，才可以判定 flag_found=true。"
+    "不要编造示例 flag；如果证据不足，明确指出缺少什么证据和下一步要做什么。"
+)
+
 
 def _read_text(path: Path, max_chars: int = 12000) -> str:
     if not path.exists():
@@ -24,13 +33,24 @@ def _read_text(path: Path, max_chars: int = 12000) -> str:
     return path.read_text(encoding="utf-8", errors="replace")[:max_chars]
 
 
-def _read_http_evidence(root: Path, max_files: int = 8) -> dict[str, str]:
+def _read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+
+
+def _read_http_evidence(root: Path, max_files: int = 30) -> dict[str, str]:
     http_dir = root / "evidence" / "http"
     evidence: dict[str, str] = {}
     if not http_dir.exists():
         return evidence
-    for path in list(http_dir.glob("*.txt"))[:max_files]:
+    for path in sorted(http_dir.glob("*.txt"))[:max_files]:
         evidence[path.name] = _read_text(path, 4000)
+    for path in sorted(http_dir.glob("proof-*.json"))[:max_files]:
+        evidence[path.name] = _read_text(path, 6000)
     return evidence
 
 
@@ -41,6 +61,8 @@ def _extract_flags_from_text(text: str) -> list[dict]:
     seen: set[str] = set()
 
     patterns = [
+        r'(?:flag|FLAG|ctf|CTF)\{\s*[^}\r\n]{1,200}\s*\}',
+        r'(?:answer|password|passwd|key)[:：]\s*(\S+)',
         r'(?:flag|FLAG|ctf|CTF)[{（(]\s*[^}）)]+\s*[}）)]',
         r'[A-Za-z0-9_\-]{8,}\{[^}]+\}',
         r'(?:答案|answer|password|passwd|key)[:：]\s*(\S+)',
@@ -54,6 +76,30 @@ def _extract_flags_from_text(text: str) -> list[dict]:
                 candidates.append({"candidate": value, "source": "text-extraction", "pattern": pattern})
 
     return candidates
+
+
+def _candidate_value(candidate: Any) -> str:
+    if isinstance(candidate, dict):
+        value = candidate.get("candidate") or candidate.get("flag") or candidate.get("value") or ""
+        return str(value).strip()
+    return str(candidate or "").strip()
+
+
+def _dedupe_candidates(candidates: list[Any]) -> list[dict]:
+    deduped: list[dict] = []
+    seen: set[str] = set()
+    for item in candidates:
+        value = _candidate_value(item)
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        if isinstance(item, dict):
+            normalized = dict(item)
+            normalized["candidate"] = value
+        else:
+            normalized = {"candidate": value, "source": "ai-analysis"}
+        deduped.append(normalized)
+    return deduped
 
 
 def _log_runner_session(db: Session, job: PentestJob, round_num: int, role: str, content: str, metadata: dict | None = None):
@@ -91,7 +137,9 @@ async def analyze_runner_artifacts(
     command_log = _read_text(root / "commands.log")
     timeline_text = _read_text(root / "timeline.json")
     input_text = _read_text(root / "input.json")
+    authorization_text = _read_text(root / "authorization.json", 4000)
     http_evidence = _read_http_evidence(root)
+    proof_summary = _read_text(root / "evidence" / "http" / "proof-summary.json", 8000)
     container_log = _read_text(root / "container.log", 8000)
 
     plan_context = plan_context or {}
@@ -103,11 +151,13 @@ async def analyze_runner_artifacts(
         "instructions": [
             "Read ALL provided HTML/JS/headers carefully.",
             "Look for flag patterns (flag{...}, ctf{...}, CTF{...}, ctfshow{...}, FLAG{...}).",
+            "Prioritize proof-summary.json and proof_*.body.txt. These are real requests constructed by the runner.",
+            "Only mark flag_found=true when the exact flag string appears in real evidence. Never invent example flags.",
             "If you find Base64 strings, decode them and search the decoded text for flags.",
             "Check JavaScript code for hardcoded passwords, comparisons, or hidden logic.",
             "Check HTTP response headers for custom fields (X-Flag, etc).",
             "Check HTML comments, hidden inputs, meta tags.",
-            "Even if the flag is only present in encoded/obfuscated form, try to reconstruct it.",
+            "For PHP eval/source leak challenges, inspect the constructed hello=... responses and extract the flag from the response body.",
         ],
         "main_ai_plan": {
             "objective": plan_context.get("target_objective", ""),
@@ -123,9 +173,11 @@ async def analyze_runner_artifacts(
         },
         "raw_evidence": {
             "input_json": input_text[:3000],
+            "authorization_json": authorization_text,
             "result_json": result_text[:4000],
             "commands_log_tail": command_log[-3000:],
             "timeline_json": timeline_text[:2000],
+            "proof_summary_json": proof_summary,
             "http_evidence": {k: v[:6000] for k, v in http_evidence.items()},
             "full_container_log": container_log[-8000:],
         },
@@ -155,8 +207,10 @@ async def analyze_runner_artifacts(
             "previous_analysis": triage_result[:3000],
             "plan_context_summary": plan_context.get("target_objective", ""),
             "full_result_json": result_text[:8000],
+            "authorization_json": authorization_text,
             "full_commands_log": command_log[-5000:],
             "full_container_log": container_log[-4000:],
+            "proof_summary_json": proof_summary,
             "http_evidence": {k: v[:2000] for k, v in http_evidence.items()},
             "required_output_format": {
                 "flag_reconstructed": "true/false",
@@ -174,22 +228,50 @@ async def analyze_runner_artifacts(
 
         solve = _extract_json(solve_result)
         extra_candidates = solve.get("flag_candidates", [])
-        all_candidates = flag_candidates + extra_candidates
+        all_candidates = _dedupe_candidates(flag_candidates + extra_candidates)
         reasoning = solve.get("reasoning_chain", "")
     else:
-        all_candidates = flag_candidates
+        all_candidates = _dedupe_candidates(flag_candidates)
         reasoning = triage.get("runner_accomplished", "")
 
     # Also extract flags from raw text
-    text_flags = _extract_flags_from_text(result_text + "\n" + command_log + "\n" + container_log)
+    text_flags = _extract_flags_from_text(result_text + "\n" + command_log + "\n" + container_log + "\n" + proof_summary)
     for tf in text_flags:
-        if not any(c.get("candidate") == tf["candidate"] for c in all_candidates):
+        if not any(_candidate_value(c) == tf["candidate"] for c in all_candidates):
             all_candidates.append(tf)
 
     # ── Round 3: Writeup ─────────────────────────────────────────
     round3_prompt = json.dumps({
         "round": 3,
-        "task": "Writeup. Produce a complete, reproducible CTF writeup based on all evidence and analysis.",
+        "task": "Writeup. Produce a focused CTF runner writeup based only on the operations this runner container actually performed to get the flag.",
+        "scope_rule": "只写 runner 容器中找到 flag 的操作流程，不要写项目总览、漏洞清单、证据索引、泛化安全建议或与本 runner 无关的内容。",
+        "writeup_creator_skill_style": [
+            "整体使用三段自然串联的简体中文叙事，不使用章节标题、编号列表或目录。",
+            "第一段用一两句话说明题目类型和核心技术逻辑。",
+            "第二段只写最终成功路径，放入真实使用的 HTTP 请求、payload 或命令；操作块必须使用 Markdown 四空格缩进，不要使用反引号围栏。",
+            "第三段解释关键细节并给出最终 flag。",
+            "不要写尝试失败的路径、泛化建议、漏洞清单、证据索引或占位符。",
+            "不要使用行内反引号，也不要使用 ``` 代码围栏。",
+            "整体控制在 30 到 60 行以内。",
+        ],
+        "preferred_sections": [
+            "解题摘要",
+            "目标",
+            "关键观察",
+            "容器执行的请求",
+            "拿到的 Flag",
+            "复现步骤",
+        ],
+        "writeup_language": "请使用简体中文输出，不要输出乱码。",
+        "clean_required_headings": [
+            "中文摘要",
+            "目标与题目要求",
+            "证据与发现",
+            "解题尝试与推理",
+            "Flag 或答案",
+            "复现步骤",
+            "残余风险",
+        ],
         "main_ai_plan": {
             "objective": plan_context.get("target_objective", ""),
             "background": plan_context.get("vulnerability_background", ""),
@@ -206,7 +288,20 @@ async def analyze_runner_artifacts(
         },
         "command_log_summary": command_log[-4000:],
         "result_json_summary": result_text[:4000],
+        "proof_summary_json": proof_summary,
         "http_evidence_summary": {k: v[:1500] for k, v in http_evidence.items()},
+        "final_format_contract": {
+            "source_skill": "writeup-creator",
+            "naming_rule": "The saved filename is writeup_YYYYMMDDHHMMSS.md.",
+            "must_follow": [
+                "Write exactly three natural paragraphs in Simplified Chinese.",
+                "Do not use headings, numbered lists, bullet lists, tables, inline backticks, or fenced code blocks.",
+                "Put the one successful reproducible HTTP request, command, or payload in a four-space indented Markdown code block.",
+                "Only include the final successful path used by the runner container to obtain the flag.",
+                "End with the exact flag from real evidence.",
+            ],
+            "ignore_conflicting_fields": "Ignore any required_sections, preferred_sections, or heading lists in this payload.",
+        },
         "required_sections": [
             "Summary (中文摘要)",
             "Target And Objective (目标与题目要求)",
@@ -222,11 +317,37 @@ async def analyze_runner_artifacts(
         round3_prompt,
         system=RUNNER_AI_ROLE + " [Writeup 轮] 根据解题方案、执行证据和前几轮分析，生成可复现的完整 CTF Writeup（Markdown 格式）。",
     )
-    _log_runner_session(db, job, 3, "ai", writeup, {"stage": "writeup"})
+    _log_runner_session(db, job, 3, "ai", writeup, {"stage": "writeup-draft"})
+
+    polish_prompt = json.dumps({
+        "task": "Rewrite the draft to strictly follow the writeup-creator skill.",
+        "draft": writeup,
+        "hard_rules": [
+            "Use Simplified Chinese.",
+            "Use this exact shape: paragraph 1, blank line, paragraph 2 ending with a colon, blank line, one four-space indented request/command block, blank line, paragraph 3 with the key explanation and exact flag.",
+            "No headings, no numbered lists, no bullet lists, no tables.",
+            "No inline backticks and no fenced code blocks.",
+            "The only operation block must be a four-space indented Markdown code block.",
+            "Do not put the operation block after the final flag paragraph.",
+            "Only keep the final successful path used by the runner. Remove failed attempts or alternate attempts.",
+            "Keep the real target, real payload, real response detail, and exact flag.",
+            "Do not add generic security advice.",
+        ],
+        "evidence": {
+            "target": job.target,
+            "flag_candidates": all_candidates,
+            "proof_summary_json": proof_summary,
+        },
+    }, ensure_ascii=False, indent=2)
+    writeup = await AIClient(db).chat(
+        polish_prompt,
+        system="你是 writeup-creator。只做格式收束和精简，不新增事实。严格遵守用户给定 skill：极简、三段自然叙事、无标题、无反引号、只写最终成功路径。",
+    )
+    _log_runner_session(db, job, 3, "ai", writeup, {"stage": "writeup-final"})
 
     # ── Save outputs ──────────────────────────────────────────────
     analysis_path = root / "ai-analysis.md"
-    writeup_path = root / "runner-writeup.md"
+    writeup_path = root / f"writeup_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"
 
     solve_text = ""
     try:

@@ -30,6 +30,7 @@ type Evidence = { id: number; file_type: string; path: string; sha256: string; p
 type Writeup = { id: number; pentest_job_id: number; path: string; sha256: string; download_url: string }
 type Stage = { key: string; label: string; status: string; count: number }
 type FlagHit = { flag: string; source: string; job_id: number; target: string; runner_profile: string }
+type Clue = { type: string; value: string; message: string; source: string; job_id: number; target: string; runner_profile: string }
 type ProviderDefaults = Record<string, { label: string; api_base: string; model: string; compatible: string }>
 type AIConfig = {
   provider: string
@@ -126,6 +127,7 @@ function App() {
   const [writeups, setWriteups] = useState<Writeup[]>([])
   const [stages, setStages] = useState<Stage[]>([])
   const [flags, setFlags] = useState<FlagHit[]>([])
+  const [clues, setClues] = useState<Clue[]>([])
   const [aiReady, setAiReady] = useState<AIReady | null>(null)
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
@@ -137,6 +139,11 @@ function App() {
   const latestPlan = plans[0]
   const allFindingIds = useMemo(() => findings.map((item) => item.id), [findings])
   const providerOptions = aiConfig?.providers || fallbackProviders
+  const runnerLabels = useMemo(() => {
+    const labels = new Map<number, string>()
+    jobs.forEach((job, index) => labels.set(job.id, `Runner#${String(index + 1).padStart(2, '0')}`))
+    return labels
+  }, [jobs])
   const actualDoneCount = useMemo(() => {
     let count = 0
     for (const stage of stages) {
@@ -177,7 +184,7 @@ function App() {
     const selected = current || active || ws[0] || null
     if (!active && selected) setActive(selected)
     if (!selected) return
-    const [targetData, findingData, jobData, planData, evidenceData, stageData, flagData, writeupData] = await Promise.all([
+    const [targetData, findingData, jobData, planData, evidenceData, stageData, flagData, clueData, writeupData] = await Promise.all([
       api<Target[]>(`/api/workspaces/${selected.id}/targets`),
       api<Finding[]>(`/api/workspaces/${selected.id}/findings`),
       api<PentestJob[]>(`/api/workspaces/${selected.id}/pentest-jobs`),
@@ -185,6 +192,7 @@ function App() {
       api<Evidence[]>(`/api/workspaces/${selected.id}/evidence`),
       api<{ stages: Stage[] }>(`/api/workspaces/${selected.id}/stage-summary`),
       api<{ flags: FlagHit[] }>(`/api/workspaces/${selected.id}/flags`),
+      api<{ clues: Clue[] }>(`/api/workspaces/${selected.id}/clues`),
       api<Writeup[]>(`/api/workspaces/${selected.id}/writeups`)
     ])
     setTargets(targetData)
@@ -195,6 +203,7 @@ function App() {
     setWriteups(writeupData)
     setStages(stageData.stages)
     setFlags(flagData.flags)
+    setClues(clueData.clues)
     setProjectName(selected.name)
     setProjectDesc(selected.description || '')
   }
@@ -406,8 +415,8 @@ function App() {
             <ShieldCheck size={26} />
           </div>
           <div className="brand-copy">
-            <strong>HawkWing</strong>
-            <span>AI 解题工作台</span>
+            <strong>鹰翼</strong>
+            <span>AI攻防工作台</span>
           </div>
         </div>
         <button className="primary" onClick={() => { setNewProjectOpen(true) }} disabled={!aiReady?.ready}>
@@ -561,7 +570,7 @@ function App() {
             <div className="scroll-list">
               {jobs.map((job) => (
                 <div className="job-row" key={job.id}>
-                  <strong>#{job.id} · {job.runner_profile}</strong>
+                  <strong>{runnerLabels.get(job.id)} · {job.runner_profile}</strong>
                   <span className={`job-status ${job.status}`}>{statusText[job.status] || job.status}</span>
                   <small>{job.result_summary || job.target}</small>
                 </div>
@@ -571,8 +580,18 @@ function App() {
           </div>
 
           <div className="panel evidence-panel">
-            <div className="panel-title"><FileText size={18} /> 证据索引</div>
+            <div className="panel-title"><FileText size={18} /> 线索 / 证据索引</div>
             <div className="scroll-list">
+              <div className="clue-board">
+                {clues.map((item, index) => (
+                  <button className={`clue-card ${item.type}`} key={`${item.type}-${item.job_id}-${item.value}`} onClick={() => navigator.clipboard?.writeText(item.value)}>
+                    <span className="number">{index + 1}</span>
+                    <strong>{item.message}</strong>
+                    <small>{runnerLabels.get(item.job_id) || 'Runner'} · {item.runner_profile} · {item.source}</small>
+                  </button>
+                ))}
+                {clues.length === 0 && <p className="empty">暂无关键线索。获取权限、破解账户或拿到 flag 后会在这里显示。</p>}
+              </div>
               {evidence.map((item) => (
                 <div className="evidence-row" key={item.id}>
                   <strong>{item.file_type} #{item.id}</strong>
@@ -590,10 +609,11 @@ function App() {
           <div className="panel report-panel">
             <div className="panel-title"><Download size={18} /> 报告</div>
             <p>报告会汇总题目、目标、漏洞、AI 方案、Runner 结果、候选 flag 和证据索引。</p>
+            <p className="report-copy">报告基于当前项目的 Runner writeup 生成；单个容器时直接整理该 writeup，多个容器时合并综合总结。</p>
             <div className="writeup-links">
               {writeups.map((item) => (
                 <a className="download-link" key={item.id} href={`${API}${item.download_url}`} target="_blank" rel="noreferrer">
-                  <Download size={16} /> Runner #{item.pentest_job_id} Writeup
+                  <Download size={16} /> {runnerLabels.get(item.pentest_job_id) || 'Runner'} Writeup
                 </a>
               ))}
             </div>

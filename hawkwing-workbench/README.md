@@ -6,6 +6,29 @@ It helps operators import temporary range targets, scan and rank findings, revie
 
 > Safety boundary: HawkWing is intended only for authorized labs, cyber ranges, and competitions. It does not ship malware/webshell generation, phishing kits, DDoS tooling, RAT frameworks, or automatic covert access deployment.
 
+## 鹰翼 AI 攻防工作台
+
+鹰翼 AI 攻防工作台面向授权 CTF、靶场和攻防演练项目，围绕“AI 读题、自动扫描、智能评估 Runner、人工确认执行、提取 flag、生成 writeup/报告”形成完整闭环。Runner 容器会在当前项目授权目标范围内调用容器内工具完成解题，并将请求、响应、flag、writeup 和报告沉淀为证据。
+
+### 最新界面展示
+
+![项目总览与 AI 解题方案](docs/images/ctf-workbench/overview.jpg)
+
+![Runner 执行中](docs/images/ctf-workbench/runner-running.jpg)
+
+![Flag、线索索引与 Writeup](docs/images/ctf-workbench/flag-and-writeups.jpg)
+
+![报告生成完成](docs/images/ctf-workbench/report-generated.jpg)
+
+### 本次更新重点
+
+- 前端改名为“鹰翼 AI 攻防工作台”，优化黑客风格界面、雷达动效、阶段进度动效和项目工作区布局。
+- 线索 / 证据索引改为当前项目内展示，线索和 Runner 编号从当前项目内重新编号。
+- Runner 任务改为授权 CTF 目标解题模式，容器内会记录授权目标、工具权限和 proof 请求证据。
+- Web Runner 会对 PHP eval/source leak 等 CTF 场景构造 proof 请求，优先从真实响应中提取 flag。
+- Runner writeup 统一使用 `writeup_YYYYMMDDHHMMSS.md` 命名，并按 `writeup-creator` 风格输出极简可复现过程。
+- 渗透报告统一使用 `渗透报告_YYYYMMDDHHMM.md` 命名；单 Runner 项目基于单个 writeup 生成，多 Runner 项目合并多个 writeup 综合总结。
+
 ## 中文说明
 
 鹰翼 HawkWing 是一个面向授权外部靶场、网络攻防比赛和蓝队实战化训练的 AI 辅助攻防工作台。平台默认不内置本地靶场，适合在比赛或演练开始后导入临时指定的外部靶场目标，并围绕“扫描发现、人工复核、执行前容器评估、人工批准、临时 Runner 容器执行、证据沉淀、报告生成”形成完整闭环。

@@ -146,10 +146,13 @@ async def build_ai_guided_execution_plan(
         "task": "Act as the main architecture AI. Read the challenge brief and scan findings, then produce a detailed solution plan for runner AIs.",
         "rules": [
             "This is an authorized CTF/range workflow.",
+            "Runner AIs are authorized to use all tools available inside their containers against the listed target only.",
+            "Runner prompts may include CTF exploitation techniques such as fuzzing, injection, deserialization testing, auth bypass checks, source disclosure, local file reads, and controlled proof-of-execution when needed to recover the flag.",
+            "Keep the authorization bounded to scenario targets and explicitly tell runners not to access unlisted third-party systems.",
             "Use only listed stock runner_profile values.",
             "Prefer web runners for http/https targets unless there is strong evidence for another category.",
             "Do not recommend malware, phishing, destructive actions, persistence, or covert real-world access.",
-            "The runner_prompt must be detailed enough for a runner AI to solve the task and write a writeup.",
+            "The runner_prompt must be detailed enough for a runner AI to solve the task, freely call container tools within scope, capture proof, extract the flag, and write a writeup.",
             "Return JSON only.",
         ],
         "scenario_text": scenario_text,
@@ -187,7 +190,7 @@ async def build_ai_guided_execution_plan(
                     "rationale": "why this runner fits this finding",
                     "focus_tools": ["tool names from the runner"],
                     "next_checks": ["checks the runner should perform"],
-                    "runner_prompt": "full prompt for the runner AI; include objective, hypotheses, allowed target, evidence to gather, flag extraction, and writeup requirements",
+                    "runner_prompt": "full prompt for the runner AI; include objective, explicit authorization for the listed target, permitted CTF actions, available tool usage, hypotheses, evidence to gather, flag extraction, and writeup requirements",
                     "confidence": "0.0-1.0",
                 }
             ],

@@ -40,10 +40,11 @@ from app.schemas import (
     WorkspaceUpdate,
 )
 from app.services.catalog import get_dynamic_runner_policy, get_runner_profiles, get_skill_registry, get_tool_catalog
+from app.services.clues import collect_workspace_clues
 from app.services.execution_planner import build_ai_guided_execution_plan, dumps_plan, loads_plan
 from app.services.ai_client import AIClient, check_ai_ready, public_ai_config, require_ai_ready, resolve_ai_config, upsert_ai_config
 from app.services.intake import analyze_project_intake
-from app.services.reporting import generate_workspace_report
+from app.services.reporting import generate_workspace_report, latest_workspace_report
 from app.services.state_bus import emit_state_event
 from app.workers.tasks import run_pentest_job, run_scan_job
 
@@ -139,7 +140,7 @@ def stage_summary(workspace_id: int, db: Session = Depends(get_db)):
     plans = db.query(ExecutionPlan).filter(ExecutionPlan.workspace_id == workspace_id).all()
     jobs = db.query(PentestJob).filter(PentestJob.workspace_id == workspace_id).all()
     evidence_count = db.query(EvidenceFile).filter(EvidenceFile.workspace_id == workspace_id).count()
-    report_path = Path(settings.report_root) / f"workspace-{workspace_id}-report.md"
+    report_path = latest_workspace_report(workspace_id)
 
     def status(done: bool, active: bool = False) -> str:
         if active:
@@ -165,7 +166,7 @@ def stage_summary(workspace_id: int, db: Session = Depends(get_db)):
                 "count": len(jobs),
             },
             {"key": "evidence", "label": "Evidence", "status": status(evidence_count > 0), "count": evidence_count},
-            {"key": "report", "label": "Report", "status": status(report_path.exists()), "count": 1 if report_path.exists() else 0},
+            {"key": "report", "label": "Report", "status": status(bool(report_path and report_path.exists())), "count": 1 if report_path and report_path.exists() else 0},
         ]
     }
 
@@ -250,9 +251,12 @@ def delete_workspace(workspace_id: int, db: Session = Depends(get_db)):
             shutil.rmtree(ws_dir, ignore_errors=True)
 
     # 3. Delete report file
-    report_path = Path(settings.report_root) / f"workspace-{workspace_id}-report.md"
-    if report_path.exists():
+    report_root = Path(settings.report_root) / f"workspace-{workspace_id}"
+    for report_path in list(report_root.glob("渗透报告_*.md")) + list(report_root.glob(f"workspace-{workspace_id}-report.md")):
         report_path.unlink(missing_ok=True)
+    legacy_report = Path(settings.report_root) / f"workspace-{workspace_id}-report.md"
+    if legacy_report.exists():
+        legacy_report.unlink(missing_ok=True)
 
     # 4. Delete workspace record
     db.delete(workspace)
@@ -547,6 +551,13 @@ def list_evidence(workspace_id: int, db: Session = Depends(get_db)):
     return db.query(EvidenceFile).filter(EvidenceFile.workspace_id == workspace_id).order_by(EvidenceFile.id.desc()).limit(500).all()
 
 
+@app.get("/api/workspaces/{workspace_id}/clues")
+def list_clues(workspace_id: int, db: Session = Depends(get_db)):
+    if not db.get(Workspace, workspace_id):
+        raise HTTPException(status_code=404, detail="workspace not found")
+    return {"clues": collect_workspace_clues(db, workspace_id)}
+
+
 @app.get("/api/workspaces/{workspace_id}/evidence/{evidence_id}/download")
 def download_evidence(workspace_id: int, evidence_id: int, db: Session = Depends(get_db)):
     evidence = db.get(EvidenceFile, evidence_id)
@@ -562,7 +573,13 @@ def download_evidence(workspace_id: int, evidence_id: int, db: Session = Depends
 def list_writeups(workspace_id: int, db: Session = Depends(get_db)):
     writeups = (
         db.query(EvidenceFile)
-        .filter(EvidenceFile.workspace_id == workspace_id, EvidenceFile.path.like("%runner-writeup.md"))
+        .filter(
+            EvidenceFile.workspace_id == workspace_id,
+            (
+                EvidenceFile.path.like("%writeup_%.md")
+                | EvidenceFile.path.like("%runner-writeup.md")
+            ),
+        )
         .order_by(EvidenceFile.id.desc())
         .all()
     )
@@ -718,8 +735,8 @@ async def generate_report(workspace_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/workspaces/{workspace_id}/report/download")
 def download_report(workspace_id: int, db: Session = Depends(get_db)):
-    path = generate_workspace_report(db, workspace_id)
-    if not Path(path).exists():
+    path = latest_workspace_report(workspace_id)
+    if not path or not Path(path).exists():
         raise HTTPException(status_code=404, detail="report not found")
     return FileResponse(path, filename=Path(path).name, media_type="text/markdown")
 
